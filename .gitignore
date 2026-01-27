@@ -58,3 +58,6 @@ frontend/yarn-error.log*
 # OS
 .DS_Store
 Thumbs.db
+
+# personal
+RECRUITER_PITCH.md
