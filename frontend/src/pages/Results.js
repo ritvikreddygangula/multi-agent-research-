@@ -1,5 +1,6 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import './Results.css';
 
@@ -12,6 +13,7 @@ const Results = () => {
   // Redirect to home if no research data
   React.useEffect(() => {
     if (!researchData) {
+      toast.error('No research data found. Redirecting to home...');
       navigate('/home');
     }
   }, [researchData, navigate]);
@@ -21,6 +23,7 @@ const Results = () => {
   }
 
   const handleNewResearch = () => {
+    toast.success('Starting new research...', { icon: '🔍' });
     navigate('/home');
   };
 
@@ -34,7 +37,14 @@ const Results = () => {
               New Research
             </button>
             <span className="user-email">{user?.email}</span>
-            <button onClick={logout} className="btn btn-secondary" style={{ marginLeft: '16px' }}>
+            <button 
+              onClick={() => {
+                toast.success('Logged out successfully', { icon: '👋' });
+                logout();
+              }} 
+              className="btn btn-secondary" 
+              style={{ marginLeft: '16px' }}
+            >
               Logout
             </button>
           </div>

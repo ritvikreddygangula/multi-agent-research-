@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import { researchService } from '../services/researchService';
 import './Home.css';
@@ -7,7 +8,6 @@ import './Home.css';
 const Home = () => {
   const [topic, setTopic] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
   const { logout, user } = useAuth();
   const navigate = useNavigate();
 
@@ -15,19 +15,28 @@ const Home = () => {
     e.preventDefault();
     
     if (!topic.trim()) {
-      setError('Please enter a research topic');
+      toast.error('Please enter a research topic');
       return;
     }
 
-    setError('');
     setLoading(true);
+    const loadingToast = toast.loading('Conducting research with AI agents...', {
+      icon: '🔍',
+    });
 
     try {
       const response = await researchService.conductResearch(topic.trim());
+      toast.dismiss(loadingToast);
+      toast.success('Research completed! Viewing results...', {
+        icon: '✨',
+      });
       // Store results and navigate to results page
-      navigate('/results', { state: { researchData: response.data } });
+      setTimeout(() => {
+        navigate('/results', { state: { researchData: response.data } });
+      }, 500);
     } catch (err) {
-      setError(err.response?.data?.error || 'Research failed. Please try again.');
+      toast.dismiss(loadingToast);
+      toast.error(err.response?.data?.error || 'Research failed. Please try again.');
       setLoading(false);
     }
   };
@@ -39,7 +48,14 @@ const Home = () => {
           <h1 className="header-title">Research Platform</h1>
           <div className="header-actions">
             <span className="user-email">{user?.email}</span>
-            <button onClick={logout} className="btn btn-secondary" style={{ marginLeft: '16px' }}>
+            <button 
+              onClick={() => {
+                toast.success('Logged out successfully', { icon: '👋' });
+                logout();
+              }} 
+              className="btn btn-secondary" 
+              style={{ marginLeft: '16px' }}
+            >
               Logout
             </button>
           </div>
@@ -66,8 +82,6 @@ const Home = () => {
                 disabled={loading}
               />
             </div>
-
-            {error && <div className="text-error" style={{ marginTop: '16px' }}>{error}</div>}
 
             <button
               type="submit"
