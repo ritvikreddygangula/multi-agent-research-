@@ -6,4 +6,5 @@ from . import views
 
 urlpatterns = [
     path('', views.conduct_research, name='conduct_research'),
+    path('stream/', views.conduct_research_streaming, name='conduct_research_streaming'),
 ]
