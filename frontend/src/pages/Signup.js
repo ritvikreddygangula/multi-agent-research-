@@ -43,8 +43,16 @@ const Signup = () => {
   return (
     <div className="auth-container">
       <div className="auth-card">
-        <h1 className="auth-title">Create Account</h1>
-        <p className="auth-subtitle">Start your research journey</p>
+        <div className="auth-header">
+          <h1 className="auth-title">Create Account</h1>
+          <p className="auth-subtitle">Start your research journey</p>
+          <div className="auth-tagline">
+            <span className="tagline-word">Planned.</span>
+            <span className="tagline-word">Researched.</span>
+            <span className="tagline-word">Synthesized.</span>
+          </div>
+          <p className="auth-description">Multi-agent intelligence beyond simple prompts</p>
+        </div>
         
         <form onSubmit={handleSubmit} className="auth-form">
           <div className="form-group">
