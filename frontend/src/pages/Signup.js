@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import './Auth.css';
 
@@ -8,7 +9,6 @@ const Signup = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
-  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { signup, isAuthenticated } = useAuth();
   const navigate = useNavigate();
@@ -21,10 +21,9 @@ const Signup = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
 
     if (password !== passwordConfirm) {
-      setError('Passwords do not match');
+      toast.error('Passwords do not match');
       return;
     }
 
@@ -33,9 +32,14 @@ const Signup = () => {
     const result = await signup(email, username, password, passwordConfirm);
     
     if (result.success) {
-      navigate('/home');
+      toast.success('Account created successfully! Welcome!', {
+        icon: '🎉',
+      });
+      setTimeout(() => {
+        navigate('/home');
+      }, 500);
     } else {
-      setError(result.error);
+      toast.error(result.error || 'Signup failed. Please try again.');
       setLoading(false);
     }
   };
@@ -110,8 +114,6 @@ const Signup = () => {
               disabled={loading}
             />
           </div>
-
-          {error && <div className="text-error">{error}</div>}
 
           <button
             type="submit"

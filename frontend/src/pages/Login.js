@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import './Auth.css';
 
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { login, isAuthenticated } = useAuth();
   const navigate = useNavigate();
@@ -19,15 +19,19 @@ const Login = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
     setLoading(true);
 
     const result = await login(email, password);
     
     if (result.success) {
-      navigate('/home');
+      toast.success('Welcome back! Redirecting...', {
+        icon: '👋',
+      });
+      setTimeout(() => {
+        navigate('/home');
+      }, 500);
     } else {
-      setError(result.error);
+      toast.error(result.error || 'Login failed. Please try again.');
       setLoading(false);
     }
   };
@@ -74,8 +78,6 @@ const Login = () => {
               disabled={loading}
             />
           </div>
-
-          {error && <div className="text-error">{error}</div>}
 
           <button
             type="submit"
