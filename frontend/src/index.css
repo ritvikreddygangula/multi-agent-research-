@@ -1,20 +1,47 @@
-/* Claude AI-inspired color scheme */
+/* Cursor-inspired dark theme with silver accents and subtle pastels */
 :root {
-  --bg-primary: #faf9f6;
-  --bg-secondary: #ffffff;
-  --bg-tertiary: #f5f4f1;
-  --text-primary: #1a1a1a;
-  --text-secondary: #666666;
-  --text-tertiary: #999999;
-  --border-color: #e5e5e0;
-  --accent-blue: #2563eb;
-  --accent-blue-hover: #1d4ed8;
-  --accent-blue-light: #eff6ff;
-  --error-red: #dc2626;
-  --success-green: #16a34a;
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  /* Background colors - deep blacks with subtle variations */
+  --bg-primary: #0a0a0a;
+  --bg-secondary: #111111;
+  --bg-tertiary: #1a1a1a;
+  --bg-elevated: #1f1f1f;
+  
+  /* Text colors - silver and light grays */
+  --text-primary: #e8e8e8;
+  --text-secondary: #b0b0b0;
+  --text-tertiary: #808080;
+  --text-muted: #606060;
+  
+  /* Border colors - silver metallic */
+  --border-color: #2a2a2a;
+  --border-light: #3a3a3a;
+  --border-silver: #4a4a4a;
+  
+  /* Accent colors - soft pastels that pop on black */
+  --accent-blue: #6b9fff;
+  --accent-blue-hover: #8bb3ff;
+  --accent-blue-glow: rgba(107, 159, 255, 0.3);
+  --accent-purple: #b19cd9;
+  --accent-purple-glow: rgba(177, 156, 217, 0.2);
+  --accent-green: #7dd3a0;
+  --accent-green-glow: rgba(125, 211, 160, 0.2);
+  
+  /* Status colors */
+  --error-red: #ff6b6b;
+  --error-red-glow: rgba(255, 107, 107, 0.2);
+  --success-green: #7dd3a0;
+  --success-green-glow: rgba(125, 211, 160, 0.2);
+  
+  /* Shadows - subtle glows */
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5);
+  --shadow-glow: 0 0 20px rgba(107, 159, 255, 0.15);
+  
+  /* Silver metallic accents */
+  --silver: #c0c0c0;
+  --silver-light: #e0e0e0;
+  --silver-dark: #808080;
 }
 
 * {
@@ -31,8 +58,12 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background-color: var(--bg-primary);
+  background-image: 
+    radial-gradient(at 0% 0%, rgba(107, 159, 255, 0.03) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(177, 156, 217, 0.03) 0px, transparent 50%);
   color: var(--text-primary);
   line-height: 1.6;
+  min-height: 100vh;
 }
 
 code {

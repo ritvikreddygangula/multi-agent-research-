@@ -6,13 +6,14 @@
 }
 
 .home-header {
-  background-color: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-color);
+  background: linear-gradient(180deg, rgba(17, 17, 17, 0.95) 0%, rgba(10, 10, 10, 0.95) 100%);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border-silver);
   padding: 16px 0;
   position: sticky;
   top: 0;
   z-index: 100;
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-md);
 }
 
 .header-content {
@@ -27,7 +28,11 @@
 .header-title {
   font-size: 20px;
   font-weight: 600;
-  color: var(--text-primary);
+  background: linear-gradient(135deg, var(--silver-light) 0%, var(--silver) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: 0.5px;
 }
 
 .header-actions {
@@ -61,15 +66,20 @@
 .welcome-title {
   font-size: 36px;
   font-weight: 600;
-  color: var(--text-primary);
+  background: linear-gradient(135deg, var(--text-primary) 0%, var(--silver-light) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
   margin-bottom: 16px;
   line-height: 1.2;
+  text-shadow: 0 0 30px rgba(107, 159, 255, 0.1);
 }
 
 .welcome-subtitle {
   font-size: 18px;
   color: var(--text-secondary);
   line-height: 1.6;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
 }
 
 .research-form {
@@ -84,30 +94,34 @@
   width: 100%;
   padding: 20px;
   border: 1px solid var(--border-color);
-  border-radius: 12px;
+  border-radius: 14px;
   font-size: 16px;
   font-family: inherit;
-  background-color: var(--bg-secondary);
+  background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-elevated) 100%);
   color: var(--text-primary);
   resize: vertical;
   min-height: 120px;
-  transition: all 0.2s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   line-height: 1.6;
+  box-shadow: var(--shadow-sm);
 }
 
 .research-input:focus {
   outline: none;
   border-color: var(--accent-blue);
-  box-shadow: 0 0 0 3px var(--accent-blue-light);
+  background: linear-gradient(135deg, var(--bg-elevated) 0%, var(--bg-secondary) 100%);
+  box-shadow: 0 0 0 2px var(--accent-blue-glow), 0 8px 24px rgba(0, 0, 0, 0.4), var(--shadow-glow);
+  transform: translateY(-2px);
 }
 
 .research-input::placeholder {
-  color: var(--text-tertiary);
+  color: var(--text-muted);
 }
 
 .research-input:disabled {
   background-color: var(--bg-tertiary);
   cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .research-submit {
