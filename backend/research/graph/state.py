@@ -3,7 +3,7 @@ import operator
 
 
 def _merge_dicts(a: dict, b: dict) -> dict:
-    """Reducer: merge two dicts, b wins on key conflict. Safe for parallel fan-in."""
+    """Reducer: merge two dicts, b wins on conflict. Safe for parallel fan-in."""
     return {**a, **b}
 
 
@@ -19,14 +19,14 @@ class SubQuestionResult(TypedDict):
     question: str
     findings: str
     sources: List[Source]
-    confidence: float          # 0.0 – 1.0
+    confidence: float
     status: Literal["pending", "running", "done", "failed"]
     error: Optional[str]
 
 
 class CriticFeedback(TypedDict):
     passed: bool
-    score: float               # 0.0 – 1.0
+    score: float
     issues: List[str]
     suggestions: List[str]
     iteration: int
@@ -34,9 +34,9 @@ class CriticFeedback(TypedDict):
 
 class GraphEvent(TypedDict):
     node: str
-    status: str                # "started" | "done" | "retry" | "failed"
+    status: str
     ts: float
-    meta: Optional[dict]       # extra info (e.g. critic score, branch index)
+    meta: Optional[dict]
 
 
 class ResearchState(TypedDict):
@@ -62,11 +62,11 @@ class ResearchState(TypedDict):
     max_critic_iterations: int
 
     # ── Final output ───────────────────────────────────────────────────
-    final_report: dict         # overview, key_concepts, findings, summary, sources, confidence_score
+    final_report: dict
 
-    # ── Execution telemetry (reducer APPENDS — streams to frontend) ────
+    # ── Execution telemetry ────────────────────────────────────────────
     graph_events: Annotated[List[GraphEvent], operator.add]
-    node_statuses: Annotated[dict, _merge_dicts]   # safe parallel writes from branches
+    node_statuses: Annotated[dict, _merge_dicts]   # safe parallel writes
 
-    # ── Error tracking (reducer APPENDS — safe for parallel branches) ──
+    # ── Error tracking ─────────────────────────────────────────────────
     errors: Annotated[List[str], operator.add]
