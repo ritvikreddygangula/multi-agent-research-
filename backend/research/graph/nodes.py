@@ -54,8 +54,9 @@ def _event(node: str, status: str, meta: dict = None) -> GraphEvent:
     return {"node": node, "status": status, "ts": _ts(), "meta": meta or {}}
 
 
-def _update_status(current: dict, node: str, status: str) -> dict:
-    return {**current, node: status}
+def _update_status(node: str, status: str) -> dict:
+    """Return a single-key dict — the _merge_dicts reducer merges it into the full statuses."""
+    return {node: status}
 
 
 # ── Node 1: Planner ───────────────────────────────────────────────────────────
@@ -106,7 +107,7 @@ Rules:
         "sub_questions": sub_questions,
         "key_aspects": key_aspects,
         "understanding": understanding,
-        "node_statuses": _update_status(state.get("node_statuses", {}), "planner", "done"),
+        "node_statuses": _update_status("planner", "done"),
         "graph_events": [_event("planner", "done", {"sub_question_count": len(sub_questions)})],
     }
 
@@ -126,7 +127,7 @@ def branch_research_node(question_index: int):
         if question_index >= len(state.get("sub_questions", [])):
             return {
                 "branch_results": [],
-                "node_statuses": _update_status(state.get("node_statuses", {}), node_id, "skipped"),
+                "node_statuses": _update_status(node_id, "skipped"),
                 "graph_events": [_event(node_id, "skipped")],
             }
 
@@ -203,7 +204,7 @@ Write a focused 2-4 paragraph response that directly answers the question."""
 
         return {
             "branch_results": [result],
-            "node_statuses": _update_status(state.get("node_statuses", {}), node_id, "done"),
+            "node_statuses": _update_status(node_id, "done"),
             "graph_events": [_event(node_id, "done", {"confidence": confidence, "source_count": len(deduped)})],
             "errors": errors,
         }
@@ -218,7 +219,7 @@ def aggregator_node(state: ResearchState) -> dict:
     """Merges all branch results into a synthesis draft. Implemented in Step 5."""
     return {
         "synthesis_draft": "[aggregator not yet implemented]",
-        "node_statuses": _update_status(state.get("node_statuses", {}), "aggregator", "done"),
+        "node_statuses": _update_status("aggregator", "done"),
         "graph_events": [_event("aggregator", "done")],
     }
 
@@ -235,7 +236,7 @@ def critic_node(state: ResearchState) -> dict:
     return {
         "critic_feedback": [feedback],
         "critic_iteration": state.get("critic_iteration", 0) + 1,
-        "node_statuses": _update_status(state.get("node_statuses", {}), "critic", "done"),
+        "node_statuses": _update_status("critic", "done"),
         "graph_events": [_event("critic", "done", {"score": 1.0})],
     }
 
@@ -254,6 +255,6 @@ def synthesizer_node(state: ResearchState) -> dict:
             "confidence_score": 0.0,
             "sources": [],
         },
-        "node_statuses": _update_status(state.get("node_statuses", {}), "synthesizer", "done"),
+        "node_statuses": _update_status("synthesizer", "done"),
         "graph_events": [_event("synthesizer", "done")],
     }
