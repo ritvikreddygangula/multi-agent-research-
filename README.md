@@ -1,213 +1,204 @@
 # Multi-Agent Research Platform
 
-A production-ready web application demonstrating **sophisticated AI agent orchestration**. Unlike simple chat interfaces, this platform uses three specialized AI agents that collaborate in a coordinated workflow to produce structured, research-grade outputs. Built with React frontend and Django backend.
+A full-stack web application that uses a team of AI agents to research any topic and produce a structured, sourced report. Instead of asking one model a question and getting one answer, this platform breaks the problem down, researches it in parallel, critiques the result, and synthesizes everything into something actually useful.
 
-## 🎯 What Makes This Special?
+I built this to go beyond the typical "send a prompt, get a response" pattern and explore what a more realistic AI pipeline looks like when you care about reliability and traceability.
 
-This is **NOT** just a ChatGPT wrapper. It's a **multi-agent orchestration system** where:
-- **Three specialized agents** work together, each with distinct roles
-- **Agents pass context** to each other, creating an intelligent research pipeline
-- **Structured outputs** instead of free-form chat responses
-- **Production-ready architecture** with service layer, authentication, and clean separation of concerns
+---
 
-## Features
+## What it does
 
-- **JWT Authentication**: Secure user authentication with signup and login
-- **Multi-Agent Research System**: Three specialized AI agents orchestrated in sequence:
-  - **PlannerAgent** (The Strategist): Analyzes topics, breaks them into sub-questions, and creates a research roadmap
-  - **ResearchAgent** (The Investigator): Performs deep factual and conceptual research using the planner's strategy
-  - **SynthesizerAgent** (The Writer): Synthesizes all findings into a polished, structured final report
-- **Agent Orchestration**: Intelligent coordination where agents use outputs from previous agents as context
-- **Clean UI**: Claude AI-inspired design with smooth, minimal interface
-- **Structured Output**: Research results organized into Overview, Key Concepts, Important Findings, and Summary
+You type in a topic — say, "the long-term effects of social media on teenage mental health" — and the platform:
 
-## Tech Stack
+1. **Plans** the research by decomposing the topic into specific sub-questions
+2. **Retrieves** context from past similar runs using vector memory (Pinecone)
+3. **Researches** each sub-question in parallel using web search, Wikipedia, and arXiv
+4. **Aggregates** all the branch findings and deduplicates them
+5. **Critiques** the synthesis and sends it back for revision if the quality score is too low
+6. **Synthesizes** everything into a final report with confidence scores and source citations
+7. **Saves** the run to Pinecone so future searches on similar topics can benefit from it
 
-### Backend
-- Django 4.2.7
-- Django REST Framework
-- JWT Authentication (djangorestframework-simplejwt)
-- OpenAI API (GPT-4)
+The whole pipeline runs as a live graph — you can watch each agent node light up in real time as it completes.
 
-### Frontend
-- React 18.2
+---
+
+## Architecture
+
+The backend is orchestrated with **LangGraph**, which lets me define the agent pipeline as an explicit state machine with typed state, parallel branches, and conditional retry logic. This is very different from chaining prompts together — every node has a clear contract: it receives the shared state, does one job, and returns only what it changed.
+
+```
+START
+  └─► Planner
+        └─► RAG Retrieval  (Pinecone semantic search over past runs)
+              └─► Fan-out  (one parallel branch per sub-question, up to 5)
+                    ├─► Branch 0 ─┐
+                    ├─► Branch 1 ─┤
+                    ├─► Branch 2 ─┼─► Aggregator
+                    ├─► Branch 3 ─┤       │
+                    └─► Branch 4 ─┘       ▼
+                                        Critic ──► (retry if score < 0.72)
+                                          │
+                                          └─► Synthesizer ──► END
+                                                  │
+                                            (upsert to Pinecone)
+```
+
+### Agent roles
+
+| Agent | Job |
+|---|---|
+| **Planner** | Breaks the topic into up to 5 focused sub-questions |
+| **RAG Retrieval** | Queries Pinecone for semantically similar past research runs |
+| **Branch Researchers** | Each branch researches one sub-question using web/Wikipedia/arXiv tools |
+| **Aggregator** | Merges all branch findings, deduplicates, computes confidence |
+| **Critic** | Scores the aggregated result and flags gaps or low-confidence claims |
+| **Synthesizer** | Writes the final structured report and stores it back to Pinecone |
+
+### Key design decisions
+
+- **Parallel fan-out via LangGraph's Send API** — branches run concurrently, not sequentially
+- **Partial failure tolerance** — if one branch errors, the rest continue; the aggregator works with what it has
+- **Retry loop** — if the critic scores the synthesis below 0.72, it routes back to the aggregator for another pass (max 2 retries)
+- **Vector memory** — every completed run is embedded and stored in Pinecone so the RAG node can pull in relevant prior context on future queries
+- **SSE streaming** — the Django backend streams `node_update` events over Server-Sent Events as each node completes, so the frontend graph updates in real time
+
+---
+
+## Tech stack
+
+**Backend**
+- Python / Django + Django REST Framework
+- LangGraph (StateGraph with typed state via TypedDict)
+- LangChain tools (web search, Wikipedia, arXiv)
+- Pinecone (vector memory, text-embedding-ada-002)
+- OpenAI GPT-4o
+- JWT authentication (djangorestframework-simplejwt)
+- Server-Sent Events for streaming
+
+**Frontend**
+- React 18
+- React Flow (live agent graph visualization)
 - React Router 6
-- Axios for API calls
-- Claude AI-inspired styling
+- Fetch API with streaming SSE reader
 
-## Project Structure
+---
+
+## Project structure
 
 ```
 multi-agent-research-team/
 ├── backend/
-│   ├── core/           # Django project settings
-│   ├── auth/           # Authentication app
-│   ├── research/       # Research app
-│   │   ├── agents/     # AI agents (Planner, Research, Synthesizer)
-│   │   └── services/   # Research orchestration service
-│   └── requirements.txt
-├── frontend/
-│   ├── src/
-│   │   ├── pages/      # Login, Signup, Home, Results
-│   │   ├── components/  # Reusable components
-│   │   ├── context/     # Auth context
-│   │   └── services/    # API services
-│   └── package.json
-└── README.md
+│   ├── core/                    # Django settings
+│   ├── auth_app/                # Signup / login endpoints
+│   └── research/
+│       ├── graph/
+│       │   ├── graph_builder.py # LangGraph StateGraph definition
+│       │   ├── nodes.py         # All agent node implementations
+│       │   ├── state.py         # Typed shared state (TypedDict)
+│       │   ├── tools.py         # Web/Wikipedia/arXiv tool wrappers
+│       │   └── pinecone_memory.py # Vector upsert and retrieval
+│       ├── services/
+│       │   └── research_service.py  # Entrypoint used by views
+│       └── views.py             # Thin API views + SSE streaming endpoint
+└── frontend/
+    └── src/
+        ├── components/
+        │   └── AgentGraphView.js  # React Flow live graph
+        ├── pages/
+        │   ├── Home.js            # Research input + live graph preview
+        │   └── Results.js         # Final report with findings + sources
+        └── services/
+            └── researchService.js # SSE stream reader
 ```
 
-## Setup Instructions
+---
+
+## Running it locally
 
 ### Prerequisites
-- Python 3.8+
-- Node.js 16+
-- OpenAI API Key
 
-### Backend Setup
+- Python 3.10+
+- Node.js 18+
+- OpenAI API key
+- Pinecone account (free tier works)
 
-1. Navigate to backend directory:
+### Backend
+
 ```bash
 cd backend
-```
-
-2. Create virtual environment:
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-3. Install dependencies:
-```bash
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-4. Create `.env` file:
-```bash
-cp .env.example .env
-```
+Create a `.env` file in `backend/`:
 
-5. Edit `.env` and add your settings:
 ```
-SECRET_KEY=your-secret-key-here
+SECRET_KEY=any-random-string
 DEBUG=True
-OPENAI_API_KEY=your-openai-api-key-here
+OPENAI_API_KEY=sk-...
+PINECONE_API_KEY=pcsk-...
+PINECONE_INDEX_NAME=research-memory
 ```
 
-6. Run migrations:
 ```bash
-python manage.py makemigrations
 python manage.py migrate
-```
-
-7. Create superuser (optional):
-```bash
-python manage.py createsuperuser
-```
-
-8. Start development server:
-```bash
 python manage.py runserver
 ```
 
-Backend will run on `http://localhost:8000`
+### Frontend
 
-### Frontend Setup
-
-1. Navigate to frontend directory:
 ```bash
 cd frontend
-```
-
-2. Install dependencies:
-```bash
 npm install
 ```
 
-3. Create `.env` file:
-```bash
-cp .env.example .env
-```
+Create a `.env` file in `frontend/`:
 
-4. Edit `.env` if needed (default should work):
 ```
 REACT_APP_API_URL=http://localhost:8000
 ```
 
-5. Start development server:
 ```bash
 npm start
 ```
 
-Frontend will run on `http://localhost:3000`
+Open `http://localhost:3000`, create an account, and start researching.
 
-## Usage
+---
 
-1. **Sign Up**: Create a new account at `/signup`
-2. **Login**: Sign in at `/login`
-3. **Research**: Enter a research topic on the Home page
-4. **View Results**: See structured research results with Overview, Key Concepts, Important Findings, and Summary
+## API endpoints
 
-## API Endpoints
+| Method | Path | Description |
+|---|---|---|
+| POST | `/api/auth/signup/` | Register a new user |
+| POST | `/api/auth/login/` | Get JWT token pair |
+| POST | `/api/research/` | Run full pipeline, returns final JSON report |
+| POST | `/api/research/stream/` | Same pipeline over SSE — streams node updates in real time |
 
-### Authentication
-- `POST /api/auth/signup/` - User registration
-- `POST /api/auth/login/` - User login
+---
 
-### Research
-- `POST /api/research/` - Conduct research (requires authentication)
-  - Body: `{ "topic": "research topic" }`
-  - Returns: Structured research results
+## What the results look like
 
-## Environment Variables
+Each research run returns:
 
-### Backend (.env)
-- `SECRET_KEY`: Django secret key
-- `DEBUG`: Debug mode (True/False)
-- `OPENAI_API_KEY`: Your OpenAI API key (required)
+- **Executive summary** — high-level overview of the topic
+- **Key concepts** — important terms and ideas surfaced during research
+- **Important findings** — per-branch findings with individual confidence scores and source links
+- **Confidence score** — overall quality score from the critic (0–1)
+- **Sources** — all web, Wikipedia, and arXiv sources cited, color-coded by type
 
-### Frontend (.env)
-- `REACT_APP_API_URL`: Backend API URL (default: http://localhost:8000)
+On the results page you can also expand a frozen snapshot of the agent graph showing which nodes ran and completed.
 
-## 🤖 Multi-Agent Workflow
+---
 
-```
-User Input (Research Topic)
-    ↓
-┌─────────────────────────┐
-│   PlannerAgent          │  ← Creates research strategy & sub-questions
-│   (Strategic Planning)  │
-└─────────────────────────┘
-    ↓ (passes plan as context)
-┌─────────────────────────┐
-│   ResearchAgent         │  ← Conducts deep research using planner's strategy
-│   (Fact Gathering)      │
-└─────────────────────────┘
-    ↓ (passes findings as context)
-┌─────────────────────────┐
-│   SynthesizerAgent      │  ← Synthesizes everything into structured output
-│   (Final Assembly)      │
-└─────────────────────────┘
-    ↓
-Structured Research Results
-```
+## Environment variables
 
-## Development Notes
-
-- The multi-agent system uses GPT-4 by default
-- Agents work sequentially with context passing: Planner → Research → Synthesizer
-- Each agent has specialized prompts and temperature settings optimized for their role
-- Research results are structured JSON with clear sections
-- UI follows Claude AI design principles: minimal, crisp, readable
-- Service layer pattern for clean agent orchestration
-
-## 📚 For More Details
-
-See [PROJECT_OVERVIEW.md](./PROJECT_OVERVIEW.md) for:
-- Detailed explanation of each agent's role
-- How to explain this project to recruiters
-- Technical architecture highlights
-- Comparison with simple chat interfaces
-
-## License
-
-MIT License
+| Variable | Where | Purpose |
+|---|---|---|
+| `SECRET_KEY` | backend | Django secret key |
+| `DEBUG` | backend | Enable debug mode |
+| `OPENAI_API_KEY` | backend | GPT-4o access |
+| `PINECONE_API_KEY` | backend | Pinecone vector store |
+| `PINECONE_INDEX_NAME` | backend | Name of your Pinecone index (1536 dims) |
+| `REACT_APP_API_URL` | frontend | Backend base URL |
