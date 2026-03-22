@@ -1,0 +1,163 @@
+/* ── Wrapper ──────────────────────────────────────────────────────────────── */
+.agent-graph-wrap {
+  background: #12121e;
+  border: 1px solid #2a2a3a;
+  border-radius: 12px;
+  overflow: hidden;
+  margin-top: 24px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Header bar ───────────────────────────────────────────────────────────── */
+.agent-graph-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 16px;
+  background: #1a1a2e;
+  border-bottom: 1px solid #2a2a3a;
+}
+
+.agent-graph-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #a0a0c0;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.agent-graph-progress {
+  font-size: 13px;
+  font-weight: 700;
+  color: #6b9fff;
+}
+
+/* ── Status message ───────────────────────────────────────────────────────── */
+.agent-graph-message {
+  font-size: 12px;
+  color: #888;
+  padding: 6px 16px;
+  background: #16162a;
+  border-bottom: 1px solid #22223a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── React Flow canvas ────────────────────────────────────────────────────── */
+.agent-graph-canvas {
+  height: 520px;
+  width: 100%;
+}
+
+/* Override React Flow defaults to match dark theme */
+.agent-graph-canvas .react-flow__renderer {
+  background: #12121e;
+}
+.agent-graph-canvas .react-flow__controls {
+  background: #1a1a2e;
+  border: 1px solid #2a2a3a;
+  border-radius: 6px;
+}
+.agent-graph-canvas .react-flow__controls button {
+  background: #1a1a2e;
+  border-bottom: 1px solid #2a2a3a;
+  color: #888;
+}
+.agent-graph-canvas .react-flow__controls button:hover {
+  background: #22223a;
+}
+
+/* ── Custom node ──────────────────────────────────────────────────────────── */
+.agent-node {
+  width: 110px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1.5px solid #3a3a5a;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  position: relative;
+  font-family: inherit;
+  transition: border-color 0.3s, background 0.3s;
+}
+
+.agent-node--running {
+  animation: node-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes node-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(180, 83, 9, 0.0); }
+  50%       { box-shadow: 0 0 0 6px rgba(180, 83, 9, 0.25); }
+}
+
+.agent-node__icon {
+  font-size: 14px;
+  line-height: 1;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.agent-node__body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.agent-node__label {
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.agent-node__sub {
+  font-size: 9px;
+  color: #666;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.agent-node__status {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-top: 2px;
+}
+
+/* React Flow handle dots */
+.react-flow__handle {
+  background: #3a3a5a !important;
+  width: 6px !important;
+  height: 6px !important;
+  border: none !important;
+}
+
+/* ── Legend ───────────────────────────────────────────────────────────────── */
+.agent-graph-legend {
+  display: flex;
+  gap: 16px;
+  padding: 8px 16px;
+  background: #1a1a2e;
+  border-top: 1px solid #2a2a3a;
+  flex-wrap: wrap;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: #888;
+  text-transform: capitalize;
+}
+
+.legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
