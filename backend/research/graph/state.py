@@ -2,6 +2,11 @@ from typing import TypedDict, List, Optional, Literal, Annotated
 import operator
 
 
+def _merge_dicts(a: dict, b: dict) -> dict:
+    """Reducer: merge two dicts, b wins on key conflict. Safe for parallel fan-in."""
+    return {**a, **b}
+
+
 class Source(TypedDict):
     title: str
     url: str
@@ -61,7 +66,7 @@ class ResearchState(TypedDict):
 
     # ── Execution telemetry (reducer APPENDS — streams to frontend) ────
     graph_events: Annotated[List[GraphEvent], operator.add]
-    node_statuses: dict        # {"planner": "done", "branch_0": "running", ...}
+    node_statuses: Annotated[dict, _merge_dicts]   # safe parallel writes from branches
 
-    # ── Error tracking ─────────────────────────────────────────────────
-    errors: List[str]
+    # ── Error tracking (reducer APPENDS — safe for parallel branches) ──
+    errors: Annotated[List[str], operator.add]
