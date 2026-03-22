@@ -169,3 +169,10 @@ CORS_ALLOW_HEADERS = [
 
 # OpenAI API Key
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+
+# Pinecone
+PINECONE_API_KEY = os.getenv('PINECONE_API_KEY')
+PINECONE_INDEX_NAME = os.getenv('PINECONE_INDEX_NAME', 'research-memory')
+
+# Tavily
+TAVILY_API_KEY = os.getenv('TAVILY_API_KEY')
