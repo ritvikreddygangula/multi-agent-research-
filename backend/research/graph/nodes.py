@@ -404,20 +404,155 @@ Return ONLY valid JSON — no markdown fences, no extra text:
     }
 
 
+# ── Node 5: Synthesizer ───────────────────────────────────────────────────────
+
+def _deduplicate_sources(branch_results: list) -> list:
+    """Merge all sources across branches, deduplicate by URL, sort by relevance."""
+    seen: set = set()
+    merged = []
+    for branch in branch_results:
+        for src in branch.get("sources", []):
+            url = src.get("url", "")
+            if url and url not in seen:
+                merged.append(src)
+                seen.add(url)
+    return sorted(merged, key=lambda s: s.get("relevance_score", 0), reverse=True)
+
+
+def _compute_overall_confidence(branch_results: list, critic_feedbacks: list) -> float:
+    """
+    Blend branch-level confidence scores with the final critic score.
+    branch weight: 60%   critic weight: 40%
+    """
+    done = [r for r in branch_results if r.get("status") == "done"]
+    if not done:
+        return 0.0
+
+    branch_avg = sum(r.get("confidence", 0) for r in done) / len(done)
+
+    if critic_feedbacks:
+        critic_score = critic_feedbacks[-1].get("score", branch_avg)
+        blended = branch_avg * 0.6 + critic_score * 0.4
+    else:
+        blended = branch_avg
+
+    return round(min(blended, 1.0), 3)
+
+
 def synthesizer_node(state: ResearchState) -> dict:
-    """Final report generation. Implemented in Step 6."""
+    """
+    Produces the final structured research report with:
+    - Per-finding confidence scores and source attribution
+    - Overall blended confidence (branch scores + critic score)
+    - Deduplicated source list ranked by relevance
+    - Concise executive summary
+    Also persists the report to ResearchHistory (no user FK needed from graph).
+    """
+    logger.info("[synthesizer] Building final report for: %s", state["topic"])
+
     branch_results = state.get("branch_results", [])
-    findings_preview = [r["question"] for r in branch_results if r.get("status") == "done"]
+    successful = [r for r in branch_results if r.get("status") == "done"]
+    critic_feedbacks = state.get("critic_feedback", [])
+
+    # ── Per-finding attributed blocks ─────────────────────────────────────────
+    attributed_findings = []
+    for r in successful:
+        attributed_findings.append({
+            "sub_question": r["question"],
+            "finding": r["findings"],
+            "confidence": r.get("confidence", 0.0),
+            "sources": [
+                {
+                    "title": s["title"],
+                    "url": s["url"],
+                    "type": s["source_type"],
+                }
+                for s in r.get("sources", [])[:3]
+            ],
+        })
+
+    # ── Overall confidence ────────────────────────────────────────────────────
+    overall_confidence = _compute_overall_confidence(branch_results, critic_feedbacks)
+
+    # ── Executive summary via LLM ─────────────────────────────────────────────
+    synthesis_draft = state.get("synthesis_draft", "")
+    llm = _get_llm(temperature=0.3)
+
+    summary_prompt = f"""You are a research editor. Write a concise 3-sentence executive summary of this research.
+
+Topic: {state["topic"]}
+
+Full synthesis:
+{synthesis_draft[:3000]}
+
+Rules:
+- 3 sentences maximum
+- Start with the most important finding
+- Be specific — include concrete facts if present
+- Do NOT use the word 'delve'"""
+
+    try:
+        executive_summary = llm.invoke(summary_prompt).content.strip()
+    except Exception as e:
+        logger.error("[synthesizer] Summary LLM call failed: %s", e)
+        executive_summary = synthesis_draft[:400]
+
+    # ── All deduplicated sources ──────────────────────────────────────────────
+    all_sources = _deduplicate_sources(branch_results)
+
+    # ── Critic metadata for transparency ─────────────────────────────────────
+    critic_meta = {}
+    if critic_feedbacks:
+        last = critic_feedbacks[-1]
+        critic_meta = {
+            "iterations": state.get("critic_iteration", 0),
+            "final_score": last.get("score"),
+            "passed_on_first_try": len(critic_feedbacks) == 1 and last.get("passed"),
+        }
+
+    final_report = {
+        "topic": state["topic"],
+        "run_id": state.get("run_id", ""),
+        "overview": state.get("understanding", ""),
+        "key_concepts": state.get("key_aspects", []),
+        "important_findings": attributed_findings,
+        "summary": executive_summary,
+        "synthesis_draft": synthesis_draft,
+        "confidence_score": overall_confidence,
+        "sources": all_sources[:15],
+        "critic": critic_meta,
+        "node_statuses": dict(state.get("node_statuses", {})),
+    }
+
+    # ── Persist to DB (best-effort, no crash if it fails) ────────────────────
+    try:
+        from research.models import ResearchHistory
+        ResearchHistory.objects.create(
+            topic=state["topic"],
+            run_id=state.get("run_id", ""),
+            overview=state.get("understanding", ""),
+            key_concepts=state.get("key_aspects", []),
+            important_findings=[f["finding"][:500] for f in attributed_findings],
+            summary=executive_summary,
+            confidence_score=overall_confidence,
+            final_report=final_report,
+        )
+        logger.info("[synthesizer] Saved to ResearchHistory run_id=%s", state.get("run_id"))
+    except Exception as e:
+        logger.warning("[synthesizer] DB persist failed (non-fatal): %s", e)
+
+    logger.info(
+        "[synthesizer] Done. confidence=%.3f  findings=%d  sources=%d  critic_iters=%d",
+        overall_confidence, len(attributed_findings), len(all_sources),
+        state.get("critic_iteration", 0),
+    )
+
     return {
-        "final_report": {
-            "topic": state["topic"],
-            "overview": state.get("understanding", ""),
-            "key_concepts": state.get("key_aspects", []),
-            "important_findings": findings_preview,
-            "summary": state.get("synthesis_draft", ""),
-            "confidence_score": 0.0,
-            "sources": [],
-        },
+        "final_report": final_report,
         "node_statuses": _update_status("synthesizer", "done"),
-        "graph_events": [_event("synthesizer", "done")],
+        "graph_events": [_event("synthesizer", "done", {
+            "confidence_score": overall_confidence,
+            "finding_count": len(attributed_findings),
+            "source_count": len(all_sources),
+        })],
     }
