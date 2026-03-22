@@ -213,31 +213,194 @@ Write a focused 2-4 paragraph response that directly answers the question."""
     return node
 
 
-# ── Node stubs (implemented in Steps 5 & 6) ──────────────────────────────────
+# ── Node 3: Aggregator ────────────────────────────────────────────────────────
 
 def aggregator_node(state: ResearchState) -> dict:
-    """Merges all branch results into a synthesis draft. Implemented in Step 5."""
+    """
+    Merges all branch results into a coherent synthesis draft.
+    On critic retry passes, injects the critic's improvement suggestions
+    so the LLM can address them explicitly.
+    """
+    logger.info("[aggregator] Merging %d branch results", len(state.get("branch_results", [])))
+
+    successful = [r for r in state.get("branch_results", []) if r.get("status") == "done"]
+
+    if not successful:
+        return {
+            "synthesis_draft": "Insufficient research data to synthesize.",
+            "node_statuses": _update_status("aggregator", "done"),
+            "graph_events": [_event("aggregator", "done", {"branch_count": 0})],
+        }
+
+    # Build evidence blocks — one per sub-question
+    evidence_blocks = "\n\n".join(
+        f"**Sub-question {i+1}:** {r['question']}\n"
+        f"**Findings:** {r['findings']}\n"
+        f"**Confidence:** {r['confidence']:.2f}\n"
+        f"**Sources:** {', '.join(s['title'][:40] for s in r['sources'][:3])}"
+        for i, r in enumerate(successful)
+    )
+
+    # On retry passes, append critic's improvement instructions
+    improvement_section = ""
+    critic_feedbacks = state.get("critic_feedback", [])
+    if critic_feedbacks:
+        last = critic_feedbacks[-1]
+        issues_txt = "\n".join(f"  - {i}" for i in last.get("issues", []))
+        suggestions_txt = "\n".join(f"  - {s}" for s in last.get("suggestions", []))
+        improvement_section = (
+            f"\n\n---\n"
+            f"**Previous review score: {last['score']:.2f} — FAILED**\n"
+            f"Issues to fix:\n{issues_txt}\n"
+            f"Suggestions:\n{suggestions_txt}\n"
+            f"Address all of the above in your revised synthesis."
+        )
+
+    llm = _get_llm(temperature=0.4)
+    prompt = f"""You are a senior research analyst. Synthesize the following research evidence into a coherent, well-structured draft report.
+
+{evidence_blocks}{improvement_section}
+
+Write a structured synthesis draft that:
+1. Integrates all sub-question findings into a unified narrative
+2. Highlights the most important and well-supported points
+3. Notes where evidence is thin or conflicting
+4. Is factual, specific, and avoids speculation
+
+Write 4-6 focused paragraphs. Do not use headers."""
+
+    try:
+        draft = llm.invoke(prompt).content
+    except Exception as e:
+        logger.error("[aggregator] LLM call failed: %s", e)
+        draft = "\n\n".join(r["findings"] for r in successful)
+
+    iteration = state.get("critic_iteration", 0)
+    logger.info("[aggregator] Draft ready (iteration %d, %d chars)", iteration, len(draft))
+
     return {
-        "synthesis_draft": "[aggregator not yet implemented]",
+        "synthesis_draft": draft,
         "node_statuses": _update_status("aggregator", "done"),
-        "graph_events": [_event("aggregator", "done")],
+        "graph_events": [_event("aggregator", "done", {"iteration": iteration, "branch_count": len(successful)})],
     }
+
+
+# ── Node 4: Critic ────────────────────────────────────────────────────────────
+
+# Scoring thresholds
+_PASS_SCORE = 0.72          # critic score required to proceed to synthesizer
+_MAX_ITERATIONS = 2         # hard cap on retry loops
 
 
 def critic_node(state: ResearchState) -> dict:
-    """Adversarial quality review. Implemented in Step 5."""
+    """
+    Adversarially reviews the synthesis draft.
+    Scores it 0.0–1.0 across four dimensions:
+      - factual_consistency  (do findings support claims?)
+      - source_diversity      (multiple source types used?)
+      - coverage              (all sub-questions addressed?)
+      - specificity           (concrete facts vs vague statements?)
+
+    If score < threshold AND iterations not exhausted → marks for retry.
+    """
+    iteration = state.get("critic_iteration", 0) + 1
+    logger.info("[critic] Review iteration %d", iteration)
+
+    branch_results = state.get("branch_results", [])
+    n_questions = len(state.get("sub_questions", []))
+    n_answered = len([r for r in branch_results if r.get("status") == "done"])
+    source_types = {s["source_type"] for r in branch_results for s in r.get("sources", [])}
+
+    llm = _get_llm(temperature=0.2)   # low temp → consistent scoring
+    prompt = f"""You are an adversarial research critic. Your job is to find weaknesses in this research synthesis.
+
+**Research topic:** {state["topic"]}
+**Sub-questions answered:** {n_answered}/{n_questions}
+**Source types used:** {', '.join(source_types) if source_types else 'none'}
+
+**Synthesis draft to review:**
+{state.get("synthesis_draft", "")}
+
+Score the synthesis on four dimensions (each 0.0–1.0):
+- factual_consistency: Are claims grounded in the evidence provided?
+- source_diversity: Are multiple source types (web, wikipedia, arxiv) represented?
+- coverage: Does the synthesis address all {n_questions} sub-questions?
+- specificity: Are concrete facts and figures cited, or is it vague?
+
+Be harsh but fair. If the synthesis is genuinely good, score it highly.
+
+Return ONLY valid JSON — no markdown fences, no extra text:
+{{
+    "factual_consistency": 0.0,
+    "source_diversity": 0.0,
+    "coverage": 0.0,
+    "specificity": 0.0,
+    "issues": ["issue 1", "issue 2"],
+    "suggestions": ["suggestion 1", "suggestion 2"]
+}}"""
+
+    try:
+        raw = llm.invoke(prompt).content
+        scores_dict = _parse_json_response(raw, {
+            "factual_consistency": 0.5,
+            "source_diversity": 0.5,
+            "coverage": 0.5,
+            "specificity": 0.5,
+            "issues": ["Could not parse critic response"],
+            "suggestions": ["Re-run aggregation"],
+        })
+    except Exception as e:
+        logger.error("[critic] LLM call failed: %s", e)
+        scores_dict = {
+            "factual_consistency": 0.5, "source_diversity": 0.5,
+            "coverage": 0.5, "specificity": 0.5,
+            "issues": [str(e)], "suggestions": [],
+        }
+
+    # Weighted average score
+    score = round(
+        scores_dict.get("factual_consistency", 0.5) * 0.35 +
+        scores_dict.get("source_diversity", 0.5)    * 0.20 +
+        scores_dict.get("coverage", 0.5)            * 0.30 +
+        scores_dict.get("specificity", 0.5)         * 0.15,
+        3,
+    )
+
+    passed = score >= _PASS_SCORE or iteration >= _MAX_ITERATIONS
+    status = "done" if passed else "retry"
+
+    logger.info(
+        "[critic] Score=%.3f  passed=%s  (factual=%.2f source=%.2f coverage=%.2f specific=%.2f)",
+        score, passed,
+        scores_dict.get("factual_consistency", 0),
+        scores_dict.get("source_diversity", 0),
+        scores_dict.get("coverage", 0),
+        scores_dict.get("specificity", 0),
+    )
+
     feedback: CriticFeedback = {
-        "passed": True,
-        "score": 1.0,
-        "issues": [],
-        "suggestions": [],
-        "iteration": 1,
+        "passed": passed,
+        "score": score,
+        "issues": scores_dict.get("issues", []),
+        "suggestions": scores_dict.get("suggestions", []),
+        "iteration": iteration,
     }
+
     return {
         "critic_feedback": [feedback],
-        "critic_iteration": state.get("critic_iteration", 0) + 1,
-        "node_statuses": _update_status("critic", "done"),
-        "graph_events": [_event("critic", "done", {"score": 1.0})],
+        "critic_iteration": iteration,
+        "node_statuses": _update_status("critic", status),
+        "graph_events": [_event("critic", status, {
+            "score": score,
+            "passed": passed,
+            "iteration": iteration,
+            "dimension_scores": {
+                "factual_consistency": scores_dict.get("factual_consistency"),
+                "source_diversity": scores_dict.get("source_diversity"),
+                "coverage": scores_dict.get("coverage"),
+                "specificity": scores_dict.get("specificity"),
+            }
+        })],
     }
 
 

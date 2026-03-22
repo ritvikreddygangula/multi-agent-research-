@@ -7,10 +7,12 @@ Topology:
             └─► fan_out  (Send API — one Send per sub-question)
                   ├─► branch_0 ─┐
                   ├─► branch_1 ─┤
-                  ├─► branch_2 ─┼─► aggregator ─► critic ─► synthesizer ─► END
-                  ├─► branch_3 ─┤      ▲
-                  └─► branch_4 ─┘      │
-                                  (critic retry loop added in Step 5)
+                  ├─► branch_2 ─┼─► aggregator ◄─────────────────┐
+                  ├─► branch_3 ─┤       │                         │
+                  └─► branch_4 ─┘       ▼                    (retry if
+                                      critic                  score < 0.72
+                                        │                    & iter < 2)
+                                        └──── synthesizer ─► END
 """
 
 from langgraph.graph import StateGraph, START, END
@@ -40,14 +42,23 @@ def fan_out_branches(state: ResearchState):
     return [Send(f"branch_{i}", state) for i in range(n)]
 
 
-# ── Critic routing (retry loop — full logic added in Step 5) ─────────────────
+# ── Critic routing (real retry loop) ─────────────────────────────────────────
 
 def route_after_critic(state: ResearchState) -> str:
     """
-    Stub routing: always go to synthesizer.
-    Step 5 replaces this with the real retry-loop logic.
+    If the latest critic feedback passed → synthesizer.
+    If it failed AND we haven't hit the iteration cap → aggregator (retry).
+    The cap is enforced inside critic_node itself (passed=True when cap reached),
+    so this function just reads the flag.
     """
-    return "synthesizer"
+    feedbacks = state.get("critic_feedback", [])
+    if not feedbacks:
+        return "synthesizer"
+
+    latest = feedbacks[-1]
+    if latest.get("passed", True):
+        return "synthesizer"
+    return "aggregator"
 
 
 # ── Graph builder ─────────────────────────────────────────────────────────────
