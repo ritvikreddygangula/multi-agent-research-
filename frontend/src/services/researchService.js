@@ -117,12 +117,13 @@ export const researchService = {
                       if (onComplete) onComplete(data);
                       resolve(data);
                       return;
-                    } else if (data.type === 'progress') {
-                      console.log('📊 SSE Progress:', data);
-                      if (onProgress) {
-                        // Call immediately to ensure state updates
-                        setTimeout(() => onProgress(data), 0);
-                      }
+                    } else if (data.type === 'progress' || data.type === 'node_update') {
+                      // node_update events from LangGraph streaming include compat
+                      // fields (agent, status, message, progress) set by the backend.
+                      // Called synchronously (no setTimeout) so that all node_update
+                      // state updates are batched BEFORE onComplete fires.
+                      console.log('📊 SSE Progress/NodeUpdate:', data.type, data.node || data.agent, data.progress);
+                      if (onProgress) onProgress(data);
                     } else {
                       console.log('⚠️ Unknown update type:', data.type);
                     }

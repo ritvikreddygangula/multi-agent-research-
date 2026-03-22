@@ -1,6 +1,9 @@
 """
 Research views for handling research requests.
 """
+import json
+import logging
+
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -8,182 +11,145 @@ from rest_framework import status
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from django.http import StreamingHttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
-from django.utils.decorators import method_decorator
-import json
-from research.services.research_service import ResearchService
-from research.services.research_service_streaming import StreamingResearchService
+
+from research.services.research_service import LangGraphResearchService
+
+logger = logging.getLogger(__name__)
+
+# Maps each LangGraph node to a (progress_start, progress_end, label) tuple.
+# Used to emit backwards-compatible "progress" events alongside native node_update payloads.
+_NODE_PROGRESS = {
+    "planner":       (5,  18, "Planner: decomposing topic into sub-questions"),
+    "rag_retrieval": (18, 25, "RAG: retrieving prior context from Pinecone"),
+    "branch_0":      (25, 36, "Branch 0: researching sub-question"),
+    "branch_1":      (36, 46, "Branch 1: researching sub-question"),
+    "branch_2":      (46, 55, "Branch 2: researching sub-question"),
+    "branch_3":      (55, 62, "Branch 3: researching sub-question"),
+    "branch_4":      (62, 68, "Branch 4: researching sub-question"),
+    "aggregator":    (68, 78, "Aggregator: merging branch findings"),
+    "critic":        (78, 86, "Critic: evaluating synthesis quality"),
+    "synthesizer":   (86, 98, "Synthesizer: generating final report"),
+}
 
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def conduct_research(request):
     """
-    Endpoint to conduct multi-agent research on a topic.
-    
-    Expected request body:
-    {
-        "topic": "Research topic string"
-    }
-    
-    Returns structured research results.
+    Non-streaming research endpoint — runs the full LangGraph pipeline and
+    returns the final report in one response.
+
+    Expected request body: { "topic": "..." }
     """
     topic = request.data.get('topic')
-    
-    if not topic:
-        return Response(
-            {'error': 'Topic is required.'},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-    
-    if not isinstance(topic, str) or len(topic.strip()) == 0:
-        return Response(
-            {'error': 'Topic must be a non-empty string.'},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-    
+
+    if not topic or not isinstance(topic, str) or not topic.strip():
+        return Response({'error': 'Topic must be a non-empty string.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
     try:
-        research_service = ResearchService()
-        result = research_service.conduct_research(topic.strip())
-        
-        # Return structured result matching frontend expectations
+        result = LangGraphResearchService().invoke(topic.strip())
         return Response({
-            "topic": result["topic"],
-            "overview": result["overview"],
-            "key_concepts": result["key_concepts"],
-            "important_findings": result["important_findings"],
-            "summary": result["summary"]
+            "topic":               result.get("topic", topic),
+            "overview":            result.get("executive_summary", result.get("overview", "")),
+            "key_concepts":        result.get("key_concepts", []),
+            "important_findings":  result.get("important_findings", []),
+            "summary":             result.get("summary", ""),
+            "confidence_score":    result.get("confidence_score", 0.0),
+            "sources":             result.get("sources", []),
         }, status=status.HTTP_200_OK)
-    
+
     except Exception as e:
-        return Response(
-            {'error': f'Research failed: {str(e)}'},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
+        logger.exception("conduct_research failed for topic=%r", topic)
+        return Response({'error': f'Research failed: {str(e)}'},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-def event_stream_generator(topic):
-    """Generator function that yields SSE formatted events."""
-    import sys
-    
+def event_stream_generator(topic: str):
+    """
+    Wraps LangGraphResearchService.stream() into SSE-formatted chunks.
+
+    Each chunk is a JSON object with:
+      • All fields from the LangGraph node_update/complete event
+      • Extra "agent", "status", "message", "progress" fields for
+        backwards compatibility with the current frontend progress bar.
+    """
     try:
-        print(f"🔵 Starting streaming research for: {topic}", flush=True)
-        service = StreamingResearchService()
-        
-        for update in service.conduct_research_streaming(topic):
-            # Format as SSE - ensure proper formatting
-            data = json.dumps(update)
-            sse_message = f"data: {data}\n\n"
-            print(f"📤 Sending SSE update: {update.get('type')} - {update.get('agent', 'N/A')} - {update.get('progress', 0)}%", flush=True)
-            yield sse_message
-            # Flush immediately to ensure data is sent
-            sys.stdout.flush()
-            
+        logger.info("[sse] starting stream for topic=%r", topic)
+        service = LangGraphResearchService()
+
+        for event in service.stream(topic):
+            event_type = event.get("type")
+
+            if event_type == "node_update":
+                node = event.get("node", "")
+                prog_start, prog_end, label = _NODE_PROGRESS.get(node, (0, 0, node))
+                payload = {
+                    **event,
+                    "agent":    node,
+                    "status":   "completed",
+                    "message":  label,
+                    "progress": prog_end,
+                }
+                logger.debug("[sse] node_update node=%s progress=%d", node, prog_end)
+
+            elif event_type == "complete":
+                payload = {**event, "progress": 100}
+                logger.info("[sse] complete event received")
+
+            else:
+                payload = event
+
+            yield f"data: {json.dumps(payload)}\n\n"
+
     except Exception as e:
         import traceback
-        print(f"❌ Stream error: {str(e)}", flush=True)
-        print(traceback.format_exc(), flush=True)
-        error_data = json.dumps({
-            "type": "error",
-            "message": f"Stream error: {str(e)}",
-            "error": str(e),
-            "traceback": traceback.format_exc()
-        })
-        yield f"data: {error_data}\n\n"
+        logger.exception("[sse] stream error for topic=%r", topic)
+        yield f"data: {json.dumps({'type': 'error', 'message': str(e), 'traceback': traceback.format_exc()})}\n\n"
 
 
 @csrf_exempt
 def conduct_research_streaming(request):
     """
-    Endpoint to conduct multi-agent research with streaming updates.
-    Bypasses DRF to avoid content negotiation issues with SSE.
-    
-    Expected request body:
-    {
-        "topic": "Research topic string"
-    }
-    
-    Returns Server-Sent Events stream with progress updates.
+    SSE endpoint for real-time LangGraph pipeline updates.
+
+    CORS is handled entirely by django-cors-headers middleware (configured in
+    settings.py). DO NOT add manual Access-Control-* headers here — doing so
+    creates duplicate headers that browsers reject, breaking the SSE stream.
+
+    Expected POST body: { "topic": "..." }
+    Returns: text/event-stream of node_update and complete events.
     """
-    # Handle CORS preflight
     if request.method == 'OPTIONS':
-        response = JsonResponse({})
-        origin = request.headers.get('Origin')
-        if origin in ['http://localhost:3000', 'http://127.0.0.1:3000']:
-            response['Access-Control-Allow-Origin'] = origin
-        response['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
-        response['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
-        response['Access-Control-Allow-Credentials'] = 'true'
-        response['Access-Control-Max-Age'] = '86400'
-        return response
-    
+        # django-cors-headers handles preflight; this branch is a safety net.
+        return JsonResponse({})
+
     if request.method != 'POST':
-        response = JsonResponse({'error': 'Method not allowed'}, status=405)
-        origin = request.headers.get('Origin')
-        if origin in ['http://localhost:3000', 'http://127.0.0.1:3000']:
-            response['Access-Control-Allow-Origin'] = origin
-        return response
-    
-    # Manual JWT authentication
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+    # Manual JWT auth (DRF decorators can't be mixed with StreamingHttpResponse)
     auth = JWTAuthentication()
     try:
         auth_result = auth.authenticate(request)
         if auth_result is None:
-            response = JsonResponse({'error': 'Authentication required'}, status=401)
-            origin = request.headers.get('Origin')
-            if origin in ['http://localhost:3000', 'http://127.0.0.1:3000']:
-                response['Access-Control-Allow-Origin'] = origin
-            return response
+            return JsonResponse({'error': 'Authentication required'}, status=401)
         user, token = auth_result
     except Exception as e:
-        response = JsonResponse({'error': f'Authentication failed: {str(e)}'}, status=401)
-        origin = request.headers.get('Origin')
-        if origin in ['http://localhost:3000', 'http://127.0.0.1:3000']:
-            response['Access-Control-Allow-Origin'] = origin
-        return response
-    
-    # Parse request body
+        return JsonResponse({'error': f'Authentication failed: {str(e)}'}, status=401)
+
     try:
-        import json as json_lib
-        body = json_lib.loads(request.body)
+        body = json.loads(request.body)
         topic = body.get('topic')
-    except (json_lib.JSONDecodeError, AttributeError, TypeError) as e:
-        response = JsonResponse({'error': f'Invalid JSON: {str(e)}'}, status=400)
-        origin = request.headers.get('Origin')
-        if origin in ['http://localhost:3000', 'http://127.0.0.1:3000']:
-            response['Access-Control-Allow-Origin'] = origin
-        return response
-    
-    if not topic:
-        response = JsonResponse({'error': 'Topic is required.'}, status=400)
-        origin = request.headers.get('Origin')
-        if origin in ['http://localhost:3000', 'http://127.0.0.1:3000']:
-            response['Access-Control-Allow-Origin'] = origin
-        return response
-    
-    if not isinstance(topic, str) or len(topic.strip()) == 0:
-        response = JsonResponse({'error': 'Topic must be a non-empty string.'}, status=400)
-        origin = request.headers.get('Origin')
-        if origin in ['http://localhost:3000', 'http://127.0.0.1:3000']:
-            response['Access-Control-Allow-Origin'] = origin
-        return response
-    
-    # Stream the actual research (no initial message needed - backend sends updates immediately)
-    def event_stream_with_initial():
-        # Stream the actual research
-        for chunk in event_stream_generator(topic.strip()):
-            yield chunk
-    
+    except (json.JSONDecodeError, AttributeError, TypeError) as e:
+        return JsonResponse({'error': f'Invalid JSON: {str(e)}'}, status=400)
+
+    if not topic or not isinstance(topic, str) or not topic.strip():
+        return JsonResponse({'error': 'Topic must be a non-empty string.'}, status=400)
+
     response = StreamingHttpResponse(
-        event_stream_with_initial(), 
-        content_type='text/event-stream; charset=utf-8'
+        event_stream_generator(topic.strip()),
+        content_type='text/event-stream; charset=utf-8',
     )
     response['Cache-Control'] = 'no-cache'
-    response['X-Accel-Buffering'] = 'no'  # Disable buffering in nginx
-    response['Connection'] = 'keep-alive'
-    # CORS headers
-    origin = request.headers.get('Origin')
-    if origin in ['http://localhost:3000', 'http://127.0.0.1:3000']:
-        response['Access-Control-Allow-Origin'] = origin
-    response['Access-Control-Allow-Credentials'] = 'true'
-    response['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+    response['X-Accel-Buffering'] = 'no'
     return response
