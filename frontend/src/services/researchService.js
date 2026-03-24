@@ -15,7 +15,7 @@ export const researchService = {
    */
   async conductResearchStreaming(topic, onProgress, onComplete, onError) {
     return new Promise((resolve, reject) => {
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       if (!token) {
         const error = new Error('No authentication token found');
         if (onError) onError({ message: error.message, error: error });
