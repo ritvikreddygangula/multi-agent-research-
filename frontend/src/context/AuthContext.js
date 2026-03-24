@@ -17,10 +17,9 @@ export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(null);
 
   useEffect(() => {
-    // Check for stored token on mount
-    const storedToken = localStorage.getItem('token');
-    const storedUser = localStorage.getItem('user');
-    
+    const storedToken = sessionStorage.getItem('token');
+    const storedUser = sessionStorage.getItem('user');
+
     if (storedToken && storedUser) {
       setToken(storedToken);
       setUser(JSON.parse(storedUser));
@@ -36,11 +35,11 @@ export const AuthProvider = ({ children }) => {
       
       setUser(user);
       setToken(tokens.access);
-      localStorage.setItem('token', tokens.access);
-      localStorage.setItem('refresh_token', tokens.refresh);
-      localStorage.setItem('user', JSON.stringify(user));
+      sessionStorage.setItem('token', tokens.access);
+      sessionStorage.setItem('refresh_token', tokens.refresh);
+      sessionStorage.setItem('user', JSON.stringify(user));
       authService.setAuthToken(tokens.access);
-      
+
       return { success: true };
     } catch (error) {
       return {
@@ -57,11 +56,11 @@ export const AuthProvider = ({ children }) => {
       
       setUser(user);
       setToken(tokens.access);
-      localStorage.setItem('token', tokens.access);
-      localStorage.setItem('refresh_token', tokens.refresh);
-      localStorage.setItem('user', JSON.stringify(user));
+      sessionStorage.setItem('token', tokens.access);
+      sessionStorage.setItem('refresh_token', tokens.refresh);
+      sessionStorage.setItem('user', JSON.stringify(user));
       authService.setAuthToken(tokens.access);
-      
+
       return { success: true };
     } catch (error) {
       return {
@@ -74,9 +73,9 @@ export const AuthProvider = ({ children }) => {
   const logout = () => {
     setUser(null);
     setToken(null);
-    localStorage.removeItem('token');
-    localStorage.removeItem('refresh_token');
-    localStorage.removeItem('user');
+    sessionStorage.removeItem('token');
+    sessionStorage.removeItem('refresh_token');
+    sessionStorage.removeItem('user');
     authService.setAuthToken(null);
   };
 
