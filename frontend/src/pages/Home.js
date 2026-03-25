@@ -4,18 +4,62 @@ import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import { researchService } from '../services/researchService';
 import AgentGraphView from '../components/AgentGraphView';
+import HistorySidebar from '../components/HistorySidebar';
 import './Home.css';
 
-// Mirrors graph_builder.py topology.
-// When node X completes, its successors become "running".
-const GRAPH_SUCCESSORS = {
-  planner:       ['rag_retrieval'],
-  rag_retrieval: ['branch_0', 'branch_1', 'branch_2', 'branch_3', 'branch_4'],
-  branch_0: [], branch_1: [], branch_2: [], branch_3: [], branch_4: [],
-  aggregator:    ['critic'],
-  critic:        ['synthesizer'],
-  synthesizer:   [],
-};
+/**
+ * Maps a live SSE event (agent + progress) to the exact node states that
+ * should be shown on the graph at that moment.
+ *
+ * The backend streams three agents:
+ *   planner    → progress 5-30
+ *   research   → progress 32-65
+ *   synthesizer→ progress 67-100
+ *
+ * We spread those across all 10 LangGraph nodes so every SSE event causes
+ * at least one visible transition.
+ */
+function resolveNodeStates(agent, progress) {
+  const s = {
+    planner:      'pending',
+    rag_retrieval:'pending',
+    branch_0:     'pending',
+    branch_1:     'pending',
+    branch_2:     'pending',
+    branch_3:     'pending',
+    branch_4:     'pending',
+    aggregator:   'pending',
+    critic:       'pending',
+    synthesizer:  'pending',
+  };
+
+  // ── Planner phase ──────────────────────────────────────────────────────
+  if (progress >= 5)  s.planner       = progress >= 30 ? 'done' : 'running';
+
+  // ── RAG retrieval ──────────────────────────────────────────────────────
+  if (progress >= 30) s.rag_retrieval = progress >= 32 ? 'done' : 'running';
+
+  // ── Parallel branches ──────────────────────────────────────────────────
+  if (progress >= 32) {
+    // All 5 branches start running together
+    s.branch_0 = progress >= 42 ? 'done' : 'running';
+    s.branch_1 = progress >= 47 ? 'done' : 'running';
+    s.branch_2 = progress >= 52 ? 'done' : 'running';
+    s.branch_3 = progress >= 57 ? 'done' : 'running';
+    s.branch_4 = progress >= 62 ? 'done' : 'running';
+  }
+
+  // ── Aggregator ─────────────────────────────────────────────────────────
+  if (progress >= 55) s.aggregator    = progress >= 65 ? 'done' : 'running';
+
+  // ── Critic ─────────────────────────────────────────────────────────────
+  if (progress >= 65) s.critic        = progress >= 67 ? 'done' : 'running';
+
+  // ── Synthesizer ────────────────────────────────────────────────────────
+  if (progress >= 67) s.synthesizer   = progress >= 95 ? 'done' : 'running';
+
+  return s;
+}
 
 const Home = () => {
   const [topic, setTopic]               = useState('');
@@ -25,11 +69,12 @@ const Home = () => {
   const [currentMessage, setCurrentMessage] = useState('');
   const [nodeStatuses, setNodeStatuses] = useState({});
   const [resultData, setResultData]     = useState(null);
+  const [sidebarOpen, setSidebarOpen]   = useState(false);
 
   const { logout, user } = useAuth();
   const navigate = useNavigate();
 
-  // Navigate to results once we have data (after showing the completed graph briefly)
+  // Navigate to results once we have data
   useEffect(() => {
     if (!resultData) return;
     const t = setTimeout(() => {
@@ -38,25 +83,7 @@ const Home = () => {
     return () => clearTimeout(t);
   }, [resultData, navigate]);
 
-  // ── Helpers ─────────────────────────────────────────────────────────────────
-
-  // Called for every node_update event from the backend.
-  // Marks the completed node as "done" and promotes its successors to "running".
-  // This is the ONLY place node statuses are written — directly from backend events.
-  function applyNodeDone(completedNode) {
-    setNodeStatuses(prev => {
-      const next = { ...prev, [completedNode]: 'done' };
-      (GRAPH_SUCCESSORS[completedNode] || []).forEach(s => {
-        if (!next[s]) next[s] = 'running';
-      });
-      // Aggregator starts running as soon as the first branch finishes
-      const doneBranches = [0,1,2,3,4].filter(i => next[`branch_${i}`] === 'done').length;
-      if (doneBranches >= 1 && !next['aggregator']) next['aggregator'] = 'running';
-      return next;
-    });
-  }
-
-  // ── Submit ───────────────────────────────────────────────────────────────────
+  // ── Submit ───────────────────────────────────────────────────────────────
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -66,34 +93,29 @@ const Home = () => {
     setShowPreview(true);
     setProgress(0);
     setCurrentMessage('Connecting to research pipeline...');
-    setNodeStatuses({ planner: 'running' }); // only planner starts as running
+    setNodeStatuses({ planner: 'running' });
     setResultData(null);
 
     try {
       const streamPromise = researchService.conductResearchStreaming(
         topic.trim(),
 
-        // onProgress — called synchronously for every node_update SSE event.
-        // We update the graph ONLY when the backend says a node actually finished.
-        // No artificial delays, no queues, no fake sequencing.
+        // onProgress — synchronous, fires for every SSE event.
+        // Drives graph state from the actual progress number.
         (update) => {
-          if (!update || (update.type !== 'progress' && update.type !== 'node_update')) return;
+          if (!update) return;
+          if (update.type !== 'progress' && update.type !== 'node_update') return;
 
-          setProgress(update.progress || 0);
+          const p = update.progress || 0;
+          setProgress(p);
           if (update.message) setCurrentMessage(update.message);
-
-          const completedNode = update.node || update.agent;
-          if (completedNode && completedNode !== 'system') {
-            applyNodeDone(completedNode);
-          }
+          setNodeStatuses(resolveNodeStates(update.agent || update.node || '', p));
         },
 
-        // onComplete — research finished; navigate after a short pause so the
-        // user can see the final all-green graph.
+        // onComplete
         (result) => {
           setProgress(100);
           setCurrentMessage('Research complete.');
-          // Mark all nodes done (in case any were skipped / arrived out of order)
           setNodeStatuses({
             planner: 'done', rag_retrieval: 'done',
             branch_0: 'done', branch_1: 'done', branch_2: 'done',
@@ -101,18 +123,15 @@ const Home = () => {
             aggregator: 'done', critic: 'done', synthesizer: 'done',
           });
           toast.success('Research completed!', { icon: '✨' });
-          setResultData(result); // triggers the navigate effect above
+          setResultData(result);
         },
 
-        // onError — fallback to the non-streaming endpoint.
-        // We do NOT fake node completion here; the graph stays at whatever
-        // state the backend had reached before the error.
+        // onError — fallback to non-streaming
         async (error) => {
           console.error('Streaming error:', error);
-
           if (error.message?.includes('fetch') || error.message?.includes('Network')) {
             toast.loading('Stream unavailable — falling back to standard mode...', { id: 'fb' });
-            setCurrentMessage('Running in standard mode (no live updates)...');
+            setCurrentMessage('Running in standard mode...');
             try {
               const response = await researchService.conductResearch(topic.trim());
               toast.dismiss('fb');
@@ -155,7 +174,7 @@ const Home = () => {
     }
   };
 
-  // ── Render ───────────────────────────────────────────────────────────────────
+  // ── Render ───────────────────────────────────────────────────────────────
 
   return (
     <div className="home-container">
@@ -163,6 +182,9 @@ const Home = () => {
         <div className="header-content">
           <h1 className="header-title">Research Platform</h1>
           <div className="header-actions">
+            <button onClick={() => setSidebarOpen(true)} className="btn btn-secondary">
+              History
+            </button>
             <span className="user-email">{user?.email}</span>
             <button
               onClick={() => { toast.success('Logged out', { icon: '👋' }); logout(); }}
@@ -215,6 +237,11 @@ const Home = () => {
           )}
         </div>
       </main>
+
+      <HistorySidebar
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+      />
     </div>
   );
 };

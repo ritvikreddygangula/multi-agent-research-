@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import AgentGraphView from '../components/AgentGraphView';
+import HistorySidebar from '../components/HistorySidebar';
 import './Results.css';
 
 // All nodes completed — passed to the frozen graph snapshot
@@ -13,7 +14,7 @@ const ALL_DONE = {
   aggregator: 'done', critic: 'done', synthesizer: 'done',
 };
 
-// ── Sub-components ────────────────────────────────────────────────────────────
+// ── Sub-components ─────────────────────────────────────────────────────────
 
 function ConfidenceBadge({ score }) {
   if (typeof score !== 'number') return null;
@@ -71,7 +72,6 @@ function SourceChip({ src }) {
 function FindingCard({ finding, index }) {
   const [expanded, setExpanded] = useState(false);
 
-  // Legacy string finding
   if (typeof finding === 'string') {
     return (
       <div className="finding-card">
@@ -135,7 +135,7 @@ function FrozenGraph() {
   return (
     <div className="frozen-graph-section">
       <button className="frozen-graph-toggle" onClick={() => setOpen(o => !o)}>
-        <span>Agent Pipeline</span>
+        <span className="frozen-graph-toggle__label">Agent Pipeline</span>
         <span className="frozen-graph-toggle__badge">completed</span>
         <span className="frozen-graph-toggle__chevron">{open ? '▲' : '▼'}</span>
       </button>
@@ -150,12 +150,13 @@ function FrozenGraph() {
   );
 }
 
-// ── Main page ─────────────────────────────────────────────────────────────────
+// ── Main page ──────────────────────────────────────────────────────────────
 
 const Results = () => {
   const { logout, user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const raw = location.state?.researchData;
 
   React.useEffect(() => {
@@ -167,7 +168,6 @@ const Results = () => {
 
   if (!raw) return null;
 
-  // Strip the SSE envelope field if present
   const { type: _type, ...researchData } = raw;
 
   const handleNewResearch = () => navigate('/home');
@@ -184,9 +184,8 @@ const Results = () => {
         <div className="header-content">
           <h1 className="header-title">Research Platform</h1>
           <div className="header-actions">
-            <button onClick={handleNewResearch} className="btn btn-secondary">
-              New Research
-            </button>
+            <button onClick={handleNewResearch} className="btn btn-secondary">New Research</button>
+            <button onClick={() => setSidebarOpen(true)} className="btn btn-secondary">History</button>
             <span className="user-email">{user?.email}</span>
             <button
               onClick={() => { toast.success('Logged out', { icon: '👋' }); logout(); }}
@@ -220,7 +219,6 @@ const Results = () => {
 
           <div className="results-sections">
 
-            {/* ── Overview ── */}
             {overview && (
               <section className="result-section">
                 <h3 className="section-title">Overview</h3>
@@ -228,7 +226,6 @@ const Results = () => {
               </section>
             )}
 
-            {/* ── Key Concepts ── */}
             {concepts.length > 0 && (
               <section className="result-section">
                 <h3 className="section-title">Key Concepts</h3>
@@ -242,7 +239,6 @@ const Results = () => {
               </section>
             )}
 
-            {/* ── Findings ── */}
             {findings.length > 0 && (
               <section className="result-section">
                 <h3 className="section-title">
@@ -265,7 +261,6 @@ const Results = () => {
               </section>
             )}
 
-            {/* ── All Sources ── */}
             {allSources.length > 0 && (
               <section className="result-section">
                 <h3 className="section-title">
@@ -286,6 +281,7 @@ const Results = () => {
           </div>
         </div>
       </main>
+      <HistorySidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
     </div>
   );
 };

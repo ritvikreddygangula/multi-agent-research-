@@ -1,47 +1,47 @@
-/* Cursor-inspired dark theme with silver accents and subtle pastels */
+/* Crimson Noir — deep charcoal base, warm red-orange accents */
 :root {
-  /* Background colors - deep blacks with subtle variations */
-  --bg-primary: #0a0a0a;
-  --bg-secondary: #111111;
-  --bg-tertiary: #1a1a1a;
-  --bg-elevated: #1f1f1f;
-  
-  /* Text colors - silver and light grays */
-  --text-primary: #e8e8e8;
-  --text-secondary: #b0b0b0;
-  --text-tertiary: #808080;
-  --text-muted: #606060;
-  
-  /* Border colors - silver metallic */
-  --border-color: #2a2a2a;
-  --border-light: #3a3a3a;
-  --border-silver: #4a4a4a;
-  
-  /* Accent colors - soft pastels that pop on black */
-  --accent-blue: #6b9fff;
-  --accent-blue-hover: #8bb3ff;
-  --accent-blue-glow: rgba(107, 159, 255, 0.3);
-  --accent-purple: #b19cd9;
-  --accent-purple-glow: rgba(177, 156, 217, 0.2);
-  --accent-green: #7dd3a0;
-  --accent-green-glow: rgba(125, 211, 160, 0.2);
-  
-  /* Status colors */
-  --error-red: #ff6b6b;
-  --error-red-glow: rgba(255, 107, 107, 0.2);
-  --success-green: #7dd3a0;
-  --success-green-glow: rgba(125, 211, 160, 0.2);
-  
-  /* Shadows - subtle glows */
-  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
-  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5);
-  --shadow-glow: 0 0 20px rgba(107, 159, 255, 0.15);
-  
-  /* Silver metallic accents */
-  --silver: #c0c0c0;
-  --silver-light: #e0e0e0;
-  --silver-dark: #808080;
+  /* Backgrounds — near-black with a warm red undertone */
+  --bg-primary:   #0d0808;
+  --bg-secondary: #140d0d;
+  --bg-tertiary:  #1a1010;
+  --bg-elevated:  #221414;
+
+  /* Text — warm off-white stepping down */
+  --text-primary:   #fef2f2;
+  --text-secondary: #c9a8a8;
+  --text-tertiary:  #8a6060;
+  --text-muted:     #5a4040;
+
+  /* Borders — deep wine tones */
+  --border-color:  #2a1818;
+  --border-light:  #3a2020;
+  --border-silver: #4a2a2a;
+
+  /* Accents — red to orange */
+  --accent-blue:       #f87171;
+  --accent-blue-hover: #fca5a5;
+  --accent-blue-glow:  rgba(248, 113, 113, 0.25);
+  --accent-purple:     #fb923c;
+  --accent-purple-glow:rgba(251, 146, 60, 0.2);
+  --accent-green:      #fbbf24;
+  --accent-green-glow: rgba(251, 191, 36, 0.18);
+
+  /* Status */
+  --error-red:          #f87171;
+  --error-red-glow:     rgba(248, 113, 113, 0.25);
+  --success-green:      #4ade80;
+  --success-green-glow: rgba(74, 222, 128, 0.2);
+
+  /* Shadows — deeper and warmer */
+  --shadow-sm:   0 2px 8px  rgba(0, 0, 0, 0.5);
+  --shadow-md:   0 4px 16px rgba(0, 0, 0, 0.6);
+  --shadow-lg:   0 8px 32px rgba(0, 0, 0, 0.7);
+  --shadow-glow: 0 0 24px   rgba(248, 113, 113, 0.12);
+
+  /* Warm silver */
+  --silver:       #c9a8a8;
+  --silver-light: #fef2f2;
+  --silver-dark:  #8a6060;
 }
 
 * {
@@ -58,9 +58,9 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background-color: var(--bg-primary);
-  background-image: 
-    radial-gradient(at 0% 0%, rgba(107, 159, 255, 0.03) 0px, transparent 50%),
-    radial-gradient(at 100% 100%, rgba(177, 156, 217, 0.03) 0px, transparent 50%);
+  background-image:
+    radial-gradient(at 20% 0%, rgba(248, 113, 113, 0.04) 0px, transparent 50%),
+    radial-gradient(at 80% 100%, rgba(251, 146, 60, 0.03) 0px, transparent 50%);
   color: var(--text-primary);
   line-height: 1.6;
   min-height: 100vh;

@@ -1,0 +1,194 @@
+.history-container {
+  min-height: 100vh;
+  background-color: var(--bg-primary);
+  display: flex;
+  flex-direction: column;
+}
+
+.history-main {
+  flex: 1;
+  padding: 48px 24px;
+}
+
+.history-content {
+  max-width: 860px;
+  margin: 0 auto;
+}
+
+.history-hero {
+  margin-bottom: 36px;
+}
+
+.history-title {
+  font-size: 28px;
+  font-weight: 600;
+  background: linear-gradient(135deg, var(--text-primary) 0%, var(--silver-light) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.history-subtitle {
+  margin-top: 6px;
+  font-size: 14px;
+  color: #666;
+}
+
+/* ── Loading / empty ──────────────────────────────────────────────────────── */
+.history-loading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #666;
+  font-size: 14px;
+  padding: 40px 0;
+}
+
+.history-empty {
+  text-align: center;
+  padding: 80px 0;
+  color: #555;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+/* ── Grid ─────────────────────────────────────────────────────────────────── */
+.history-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* ── Card ─────────────────────────────────────────────────────────────────── */
+.hcard {
+  background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-elevated) 100%);
+  border: 1px solid var(--border-silver);
+  border-radius: 14px;
+  padding: 22px 24px;
+  cursor: pointer;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.hcard:hover {
+  border-color: var(--accent-blue);
+  box-shadow: var(--shadow-md), 0 0 16px rgba(107,159,255,0.07);
+}
+
+.hcard__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.hcard__topic {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+  line-height: 1.4;
+  flex: 1;
+}
+
+.hcard__rename-input {
+  flex: 1;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--accent-blue);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-family: inherit;
+  outline: none;
+}
+
+/* ── Confidence pill ──────────────────────────────────────────────────────── */
+.h-confidence {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+.h-confidence--high { background: rgba(74,222,128,0.15); color: #4ade80; border: 1px solid rgba(74,222,128,0.3); }
+.h-confidence--mid  { background: rgba(251,191,36,0.15);  color: #fbbf24; border: 1px solid rgba(251,191,36,0.3); }
+.h-confidence--low  { background: rgba(248,113,113,0.15); color: #f87171; border: 1px solid rgba(248,113,113,0.3); }
+
+/* ── Summary preview ──────────────────────────────────────────────────────── */
+.hcard__summary {
+  font-size: 13px;
+  color: #888;
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* ── Meta row ─────────────────────────────────────────────────────────────── */
+.hcard__meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 11px;
+  color: #555;
+}
+
+.hcard__sources-count,
+.hcard__findings-count {
+  padding: 1px 7px;
+  border-radius: 8px;
+  background: rgba(107,159,255,0.1);
+  color: #6b9fff;
+  border: 1px solid rgba(107,159,255,0.2);
+}
+
+/* ── Action buttons ───────────────────────────────────────────────────────── */
+.hcard__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.hcard__btn {
+  padding: 5px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid;
+  transition: background 0.2s, transform 0.15s;
+  font-family: inherit;
+}
+
+.hcard__btn:hover { transform: translateY(-1px); }
+
+.hcard__btn--open {
+  background: rgba(107,159,255,0.1);
+  color: #6b9fff;
+  border-color: rgba(107,159,255,0.3);
+}
+.hcard__btn--open:hover { background: rgba(107,159,255,0.2); }
+
+.hcard__btn--rename {
+  background: rgba(255,255,255,0.04);
+  color: #999;
+  border-color: rgba(255,255,255,0.1);
+}
+.hcard__btn--rename:hover { background: rgba(255,255,255,0.08); color: #ccc; }
+
+.hcard__btn--delete {
+  background: rgba(248,113,113,0.08);
+  color: #f87171;
+  border-color: rgba(248,113,113,0.25);
+}
+.hcard__btn--delete:hover { background: rgba(248,113,113,0.18); }
+
+/* ── Responsive ───────────────────────────────────────────────────────────── */
+@media (max-width: 600px) {
+  .hcard { padding: 16px; }
+  .history-title { font-size: 22px; }
+}

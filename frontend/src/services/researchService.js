@@ -5,6 +5,23 @@ export const researchService = {
     return api.post('/api/research/', { topic });
   },
 
+  async getHistory() {
+    return api.get('/api/research/history/');
+  },
+
+  async getHistoryItem(id) {
+    return api.get(`/api/research/history/${id}/`);
+  },
+
+  async renameHistoryItem(id, topic) {
+    return api.patch(`/api/research/history/${id}/`, { topic });
+  },
+
+  async deleteHistoryItem(id) {
+    return api.delete(`/api/research/history/${id}/`);
+  },
+
+
   /**
    * Conduct research with streaming updates using Server-Sent Events
    * @param {string} topic - Research topic
@@ -26,8 +43,8 @@ export const researchService = {
       const baseUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000';
       const url = `${baseUrl}/api/research/stream/`;
 
-      console.log('🚀 Starting streaming research for topic:', topic);
-      
+      console.log('Starting streaming research for topic:', topic);
+
       // Use fetch with POST for SSE (EventSource doesn't support POST)
       fetch(url, {
         method: 'POST',
@@ -39,13 +56,11 @@ export const researchService = {
         body: JSON.stringify({ topic }),
       })
         .then(response => {
-          console.log('📥 Response received:', response.status, response.statusText);
-          console.log('📥 Content-Type:', response.headers.get('content-type'));
-          
+          console.log('Response received:', response.status, response.statusText);
+
           if (!response.ok) {
-            // Try to parse as JSON, fallback to status text
             return response.text().then(text => {
-              console.error('❌ Response not OK:', text);
+              console.error('Response not OK:', text);
               try {
                 const err = JSON.parse(text);
                 throw new Error(err.error || `HTTP error! status: ${response.status}`);
@@ -54,21 +69,11 @@ export const researchService = {
               }
             });
           }
-          
-          // Check if response is actually SSE
-          const contentType = response.headers.get('content-type');
-          console.log('📥 Content-Type check:', contentType);
-          
-          if (!contentType || !contentType.includes('text/event-stream')) {
-            console.warn('⚠️ Not SSE format, but continuing anyway. Content-Type:', contentType);
-            // Don't throw, just continue - some servers don't set content-type correctly
-          }
-          
+
           if (!response.body) {
             throw new Error('Response body is null - cannot read stream');
           }
-          
-          console.log('✅ Starting to read stream...');
+
           const reader = response.body.getReader();
           const decoder = new TextDecoder();
           let buffer = '';
@@ -76,44 +81,36 @@ export const researchService = {
           const readStream = () => {
             reader.read().then(({ done, value }) => {
               if (done) {
-                console.log('✅ Stream completed');
-                if (buffer.trim()) {
-                  console.log('⚠️ Remaining buffer:', buffer);
-                }
+                console.log('Stream completed');
                 resolve();
                 return;
               }
 
               const chunk = decoder.decode(value, { stream: true });
-              console.log('📦 Received chunk:', chunk.substring(0, 100) + '...');
               buffer += chunk;
-              
+
               // Process complete lines
               const lines = buffer.split('\n');
               buffer = lines.pop() || ''; // Keep incomplete line in buffer
 
               for (const line of lines) {
                 const trimmedLine = line.trim();
-                if (!trimmedLine) continue; // Skip empty lines
-                
+                if (!trimmedLine) continue;
+
                 if (trimmedLine.startsWith('data: ')) {
                   try {
                     const jsonStr = trimmedLine.slice(6).trim();
-                    if (!jsonStr) {
-                      console.log('⚠️ Empty data line');
-                      continue;
-                    }
-                    
+                    if (!jsonStr) continue;
+
                     const data = JSON.parse(jsonStr);
-                    console.log('📡 Received SSE update:', data);
-                    
+
                     if (data.type === 'error') {
-                      console.error('❌ SSE Error:', data);
+                      console.error('SSE Error:', data);
                       if (onError) onError(data);
                       reject(new Error(data.message || data.error));
                       return;
                     } else if (data.type === 'complete') {
-                      console.log('✅ SSE Complete:', data);
+                      console.log('SSE Complete');
                       if (onComplete) onComplete(data);
                       resolve(data);
                       return;
@@ -122,27 +119,23 @@ export const researchService = {
                       // fields (agent, status, message, progress) set by the backend.
                       // Called synchronously (no setTimeout) so that all node_update
                       // state updates are batched BEFORE onComplete fires.
-                      console.log('📊 SSE Progress/NodeUpdate:', data.type, data.node || data.agent, data.progress);
                       if (onProgress) onProgress(data);
                     } else {
-                      console.log('⚠️ Unknown update type:', data.type);
+                      console.log('Unknown update type:', data.type);
                     }
                   } catch (e) {
-                    console.error('❌ Error parsing SSE data:', e);
-                    console.error('❌ Problematic line:', trimmedLine);
+                    console.error('Error parsing SSE data:', e);
                   }
                 } else if (trimmedLine.startsWith(':')) {
                   // SSE comment, ignore
                   continue;
-                } else {
-                  console.log('⚠️ Non-data line:', trimmedLine);
                 }
               }
 
               // Continue reading
               readStream();
             }).catch(err => {
-              console.error('❌ Stream read error:', err);
+              console.error('Stream read error:', err);
               if (onError) onError({ message: err.message, error: err });
               reject(err);
             });
