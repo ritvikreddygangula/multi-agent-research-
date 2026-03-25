@@ -6,6 +6,7 @@ import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Home from './pages/Home';
 import Results from './pages/Results';
+import History from './pages/History';
 import PrivateRoute from './components/PrivateRoute';
 import './App.css';
 
@@ -65,6 +66,14 @@ function App() {
               element={
                 <PrivateRoute>
                   <Results />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/history"
+              element={
+                <PrivateRoute>
+                  <History />
                 </PrivateRoute>
               }
             />

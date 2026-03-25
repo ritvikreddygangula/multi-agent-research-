@@ -155,11 +155,20 @@
 .header-actions {
   display: flex;
   align-items: center;
+  gap: 10px;
 }
 
 .user-email {
-  font-size: 14px;
-  color: var(--text-secondary);
+  font-size: 12px;
+  color: var(--text-muted);
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  padding: 5px 12px;
+  white-space: nowrap;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .home-main {
@@ -195,12 +204,7 @@
   transform: translate(-50%, -50%);
   width: 120%;
   height: 120%;
-  background: radial-gradient(
-    circle,
-    rgba(107, 159, 255, 0.08) 0%,
-    rgba(177, 156, 217, 0.05) 50%,
-    transparent 70%
-  );
+  background: radial-gradient(circle, rgba(248,113,113,0.05) 0%, transparent 70%);
   filter: blur(60px);
   z-index: -1;
   pointer-events: none;
@@ -209,15 +213,13 @@
 .welcome-title {
   font-size: 36px;
   font-weight: 600;
-  background: linear-gradient(135deg, #e8e8e8 0%, #b0b0b0 50%, #6b9fff 100%);
+  background: linear-gradient(135deg, var(--text-primary) 0%, var(--accent-blue) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
   margin-bottom: 16px;
   line-height: 1.2;
-  text-shadow: 0 0 40px rgba(107, 159, 255, 0.3);
   position: relative;
-  animation: titleGlow 3s ease-in-out infinite;
 }
 
 @keyframes titleGlow {
