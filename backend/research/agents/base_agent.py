@@ -9,9 +9,12 @@ import httpx
 
 class BaseAgent(ABC):
     """Base class for all research agents."""
-    
+
     def __init__(self):
         """Initialize the agent with OpenAI client."""
+        self._prompt_tokens: int = 0
+        self._completion_tokens: int = 0
+
         api_key = settings.OPENAI_API_KEY
         if not api_key:
             raise ValueError("OPENAI_API_KEY not found in environment variables")
@@ -51,17 +54,17 @@ class BaseAgent(ABC):
         """
         pass
     
+    @property
+    def tokens_used(self) -> int:
+        """Total tokens consumed by this agent instance so far."""
+        return self._prompt_tokens + self._completion_tokens
+
     def _call_openai(self, messages: list, model: str = "gpt-4", temperature: float = 0.7) -> str:
         """
-        Make a call to OpenAI API.
-        
-        Args:
-            messages: List of message dictionaries
-            model: Model to use (default: gpt-4)
-            temperature: Temperature setting (default: 0.7)
-            
+        Make a call to OpenAI API and accumulate token usage.
+
         Returns:
-            Response content from OpenAI
+            Response content from OpenAI.
         """
         try:
             response = self.client.chat.completions.create(
@@ -69,6 +72,9 @@ class BaseAgent(ABC):
                 messages=messages,
                 temperature=temperature,
             )
+            if response.usage:
+                self._prompt_tokens += response.usage.prompt_tokens
+                self._completion_tokens += response.usage.completion_tokens
             return response.choices[0].message.content
         except Exception as e:
             raise Exception(f"OpenAI API error: {str(e)}")
