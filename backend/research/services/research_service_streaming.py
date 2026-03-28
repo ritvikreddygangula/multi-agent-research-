@@ -316,6 +316,12 @@ class StreamingResearchService:
             }
             time.sleep(0.3)
             
+            tokens_used = (
+                self.planner.tokens_used
+                + self.research.tokens_used
+                + self.synthesizer.tokens_used
+            )
+
             final_result = {
                 "type": "complete",
                 "topic": topic,
@@ -323,9 +329,10 @@ class StreamingResearchService:
                 "key_concepts": synthesis_result.get('synthesis', {}).get('key_concepts', []),
                 "important_findings": synthesis_result.get('synthesis', {}).get('important_findings', []),
                 "summary": synthesis_result.get('synthesis', {}).get('summary', ''),
-                "progress": 100
+                "progress": 100,
+                "tokens_used": tokens_used,
             }
-            
+
             yield final_result
             
         except Exception as e:

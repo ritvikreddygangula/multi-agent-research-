@@ -21,12 +21,14 @@ class ResearchService:
             planner_result = self.planner.execute(topic)
             research_result = self.research.execute(topic, context={"plan": planner_result.get("plan", {})})
             synthesis_result = self.synthesizer.execute(topic, context={"planner": planner_result, "research": research_result})
+            tokens = self.planner.tokens_used + self.research.tokens_used + self.synthesizer.tokens_used
             return {
                 "topic": topic,
                 "overview": synthesis_result.get("synthesis", {}).get("overview", ""),
                 "key_concepts": synthesis_result.get("synthesis", {}).get("key_concepts", []),
                 "important_findings": synthesis_result.get("synthesis", {}).get("important_findings", []),
                 "summary": synthesis_result.get("synthesis", {}).get("summary", ""),
+                "tokens_used": tokens,
             }
         except Exception as e:
             raise Exception(f"Research service error: {e}")
