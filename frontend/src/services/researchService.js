@@ -77,12 +77,19 @@ export const researchService = {
           const reader = response.body.getReader();
           const decoder = new TextDecoder();
           let buffer = '';
+          let completedCleanly = false;
 
           const readStream = () => {
             reader.read().then(({ done, value }) => {
               if (done) {
                 console.log('Stream completed');
-                resolve();
+                if (!completedCleanly) {
+                  const err = new Error('Research stream closed before completing. The request may have timed out — please try again.');
+                  if (onError) onError({ message: err.message, error: err });
+                  reject(err);
+                } else {
+                  resolve();
+                }
                 return;
               }
 
@@ -111,6 +118,7 @@ export const researchService = {
                       return;
                     } else if (data.type === 'complete') {
                       console.log('SSE Complete');
+                      completedCleanly = true;
                       if (onComplete) onComplete(data);
                       resolve(data);
                       return;
