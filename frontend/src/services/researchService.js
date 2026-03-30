@@ -1,4 +1,4 @@
-import api from './authService';
+import api, { safeStorage } from './authService';
 
 export const researchService = {
   async conductResearch(topic) {
@@ -32,7 +32,7 @@ export const researchService = {
    */
   async conductResearchStreaming(topic, onProgress, onComplete, onError) {
     return new Promise((resolve, reject) => {
-      const token = sessionStorage.getItem('token');
+      const token = safeStorage.getItem('token');
       if (!token) {
         const error = new Error('No authentication token found');
         if (onError) onError({ message: error.message, error: error });
@@ -40,7 +40,7 @@ export const researchService = {
         return;
       }
 
-      const baseUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+      const baseUrl = (process.env.REACT_APP_API_URL || 'http://localhost:8000').replace(/\/$/, '');
       const url = `${baseUrl}/api/research/stream/`;
 
       console.log('Starting streaming research for topic:', topic);

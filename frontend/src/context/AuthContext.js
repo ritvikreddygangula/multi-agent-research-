@@ -1,5 +1,5 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
-import { authService } from '../services/authService';
+import { authService, safeStorage } from '../services/authService';
 
 const AuthContext = createContext();
 
@@ -17,8 +17,8 @@ export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(null);
 
   useEffect(() => {
-    const storedToken = sessionStorage.getItem('token');
-    const storedUser = sessionStorage.getItem('user');
+    const storedToken = safeStorage.getItem('token');
+    const storedUser = safeStorage.getItem('user');
 
     if (storedToken && storedUser) {
       setToken(storedToken);
@@ -35,9 +35,9 @@ export const AuthProvider = ({ children }) => {
       
       setUser(user);
       setToken(tokens.access);
-      sessionStorage.setItem('token', tokens.access);
-      sessionStorage.setItem('refresh_token', tokens.refresh);
-      sessionStorage.setItem('user', JSON.stringify(user));
+      safeStorage.setItem('token', tokens.access);
+      safeStorage.setItem('refresh_token', tokens.refresh);
+      safeStorage.setItem('user', JSON.stringify(user));
       authService.setAuthToken(tokens.access);
 
       return { success: true };
@@ -56,9 +56,9 @@ export const AuthProvider = ({ children }) => {
       
       setUser(user);
       setToken(tokens.access);
-      sessionStorage.setItem('token', tokens.access);
-      sessionStorage.setItem('refresh_token', tokens.refresh);
-      sessionStorage.setItem('user', JSON.stringify(user));
+      safeStorage.setItem('token', tokens.access);
+      safeStorage.setItem('refresh_token', tokens.refresh);
+      safeStorage.setItem('user', JSON.stringify(user));
       authService.setAuthToken(tokens.access);
 
       return { success: true };
@@ -73,9 +73,9 @@ export const AuthProvider = ({ children }) => {
   const logout = () => {
     setUser(null);
     setToken(null);
-    sessionStorage.removeItem('token');
-    sessionStorage.removeItem('refresh_token');
-    sessionStorage.removeItem('user');
+    safeStorage.removeItem('token');
+    safeStorage.removeItem('refresh_token');
+    safeStorage.removeItem('user');
     authService.setAuthToken(null);
   };
 
