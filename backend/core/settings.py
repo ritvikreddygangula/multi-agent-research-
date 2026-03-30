@@ -20,6 +20,11 @@ DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
 
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
+# Render automatically sets RENDER_EXTERNAL_HOSTNAME — add it without any manual config needed
+RENDER_HOSTNAME = os.getenv('RENDER_EXTERNAL_HOSTNAME')
+if RENDER_HOSTNAME:
+    ALLOWED_HOSTS.append(RENDER_HOSTNAME)
+
 
 # Application definition
 
