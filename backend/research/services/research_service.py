@@ -1,69 +1,50 @@
 """
-Research service layer.
+Research service — LangGraph orchestration entrypoint.
 
-LangGraphResearchService  — graph-based orchestrator (Steps 4+)
-ResearchService           — legacy sequential pipeline (kept as fallback)
+All research runs go through the LangGraph StateGraph defined in research/graph/.
 """
 import uuid
-from research.agents import PlannerAgent, ResearchAgent, SynthesizerAgent
 
 
-class ResearchService:
-    """Legacy sequential pipeline — kept as fallback."""
-
-    def __init__(self):
-        self.planner = PlannerAgent()
-        self.research = ResearchAgent()
-        self.synthesizer = SynthesizerAgent()
-
-    def conduct_research(self, topic: str) -> dict:
-        try:
-            planner_result = self.planner.execute(topic)
-            research_result = self.research.execute(topic, context={"plan": planner_result.get("plan", {})})
-            synthesis_result = self.synthesizer.execute(topic, context={"planner": planner_result, "research": research_result})
-            tokens = self.planner.tokens_used + self.research.tokens_used + self.synthesizer.tokens_used
-            return {
-                "topic": topic,
-                "overview": synthesis_result.get("synthesis", {}).get("overview", ""),
-                "key_concepts": synthesis_result.get("synthesis", {}).get("key_concepts", []),
-                "important_findings": synthesis_result.get("synthesis", {}).get("important_findings", []),
-                "summary": synthesis_result.get("synthesis", {}).get("summary", ""),
-                "tokens_used": tokens,
-            }
-        except Exception as e:
-            raise Exception(f"Research service error: {e}")
+def _initial_state(topic: str) -> dict:
+    return {
+        "topic": topic,
+        "run_id": str(uuid.uuid4()),
+        "sub_questions": [],
+        "key_aspects": [],
+        "understanding": "",
+        "rag_context": [],
+        "branch_results": [],
+        "synthesis_draft": "",
+        "critic_feedback": [],
+        "critic_iteration": 0,
+        "max_critic_iterations": 2,
+        "final_report": {},
+        "graph_events": [],
+        "node_statuses": {},
+        "errors": [],
+    }
 
 
 class LangGraphResearchService:
-    """Graph-based orchestrator using LangGraph StateGraph."""
-
-    def _build_initial_state(self, topic: str) -> dict:
-        return {
-            "topic": topic,
-            "run_id": str(uuid.uuid4()),
-            "sub_questions": [],
-            "key_aspects": [],
-            "understanding": "",
-            "rag_context": [],
-            "branch_results": [],
-            "synthesis_draft": "",
-            "critic_feedback": [],
-            "critic_iteration": 0,
-            "max_critic_iterations": 2,
-            "final_report": {},
-            "graph_events": [],
-            "node_statuses": {},
-            "errors": [],
-        }
+    """Orchestrates research through the LangGraph StateGraph."""
 
     def invoke(self, topic: str) -> dict:
+        """Run the full graph synchronously and return the final report."""
         from research.graph.graph_builder import research_graph
-        final_state = research_graph.invoke(self._build_initial_state(topic))
+        final_state = research_graph.invoke(_initial_state(topic))
         return final_state.get("final_report", {})
 
     def stream(self, topic: str):
+        """
+        Stream graph execution as SSE-compatible events.
+
+        Yields:
+          - node_update  — emitted after each node completes, carries node name and statuses
+          - complete     — emitted once the synthesizer node produces a final_report
+        """
         from research.graph.graph_builder import research_graph
-        for event in research_graph.stream(self._build_initial_state(topic), stream_mode="updates"):
+        for event in research_graph.stream(_initial_state(topic), stream_mode="updates"):
             for node_name, patch in event.items():
                 yield {
                     "type": "node_update",

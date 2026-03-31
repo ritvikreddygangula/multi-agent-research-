@@ -16,8 +16,7 @@ from rest_framework import status
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from accounts.models import UserTokenBudget
-from research.services.research_service import ResearchService
-from research.services.research_service_streaming import StreamingResearchService
+from research.services.research_service import LangGraphResearchService
 from research.models import ResearchHistory
 from research.serializers import ResearchHistorySerializer
 
@@ -27,8 +26,7 @@ logger = logging.getLogger(__name__)
 # ── Token budget helpers ────────────────────────────────────────────────────────
 
 def _get_budget(user) -> UserTokenBudget:
-    """Get or create a token budget for this user, seeding from settings."""
-    budget, created = UserTokenBudget.objects.get_or_create(
+    budget, _ = UserTokenBudget.objects.get_or_create(
         user=user,
         defaults={'token_limit': getattr(settings, 'DEFAULT_TOKEN_LIMIT', 100_000)},
     )
@@ -36,7 +34,6 @@ def _get_budget(user) -> UserTokenBudget:
 
 
 def _budget_exceeded_response(budget: UserTokenBudget):
-    """Return a standard over-limit payload."""
     return {
         'error': (
             f'You have used all {budget.token_limit:,} tokens in your research quota. '
@@ -73,13 +70,10 @@ def _save_run(user, result: dict):
         logger.exception("Failed to save research run for user=%s", user)
 
 
-# ── Research endpoints ─────────────────────────────────────────────────────────
-
 _MAX_TOPIC_LENGTH = 500
 
 
 def _validate_topic(topic) -> str | None:
-    """Return cleaned topic string or None if invalid."""
     if not topic or not isinstance(topic, str):
         return None
     topic = topic.strip()
@@ -87,6 +81,8 @@ def _validate_topic(topic) -> str | None:
         return None
     return topic
 
+
+# ── Research endpoints ─────────────────────────────────────────────────────────
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -103,7 +99,7 @@ def conduct_research(request):
         return Response(_budget_exceeded_response(budget), status=status.HTTP_402_PAYMENT_REQUIRED)
 
     try:
-        result = ResearchService().conduct_research(topic)
+        result = LangGraphResearchService().invoke(topic)
         _save_run(request.user, result)
         _deduct_tokens(request.user, result.get('tokens_used', 0))
         return Response({
@@ -121,22 +117,21 @@ def conduct_research(request):
         return Response({'error': msg}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-def _event_stream_generator(topic: str, user):
-    """Wrap StreamingResearchService into SSE chunks, enforce budget, deduct on complete."""
+def _stream_generator(topic: str, user):
+    """Run LangGraph and emit SSE events. Saves the run and deducts tokens on completion."""
     try:
-        service = StreamingResearchService()
-        for event in service.conduct_research_streaming(topic):
+        for event in LangGraphResearchService().stream(topic):
             if event.get('type') == 'complete':
                 _save_run(user, event)
                 _deduct_tokens(user, event.get('tokens_used', 0))
             yield f"data: {json.dumps(event)}\n\n"
     except Exception as e:
         logger.exception("[sse] stream error for topic=%r", topic)
-        error_payload = {'type': 'error', 'message': str(e)}
+        payload = {'type': 'error', 'message': str(e)}
         if settings.DEBUG:
             import traceback
-            error_payload['traceback'] = traceback.format_exc()
-        yield f"data: {json.dumps(error_payload)}\n\n"
+            payload['traceback'] = traceback.format_exc()
+        yield f"data: {json.dumps(payload)}\n\n"
 
 
 @csrf_exempt
@@ -152,7 +147,7 @@ def conduct_research_streaming(request):
         auth_result = auth.authenticate(request)
         if auth_result is None:
             return JsonResponse({'error': 'Authentication required'}, status=401)
-        user, _token = auth_result
+        user, _ = auth_result
     except Exception as e:
         return JsonResponse({'error': f'Authentication failed: {str(e)}'}, status=401)
 
@@ -171,11 +166,10 @@ def conduct_research_streaming(request):
 
     budget = _get_budget(user)
     if budget.is_over_limit:
-        # Return a normal JSON response (not a stream) so the frontend can handle it cleanly.
         return JsonResponse(_budget_exceeded_response(budget), status=402)
 
     response = StreamingHttpResponse(
-        _event_stream_generator(topic, user),
+        _stream_generator(topic, user),
         content_type='text/event-stream; charset=utf-8',
     )
     response['Cache-Control'] = 'no-cache'
@@ -188,13 +182,12 @@ def conduct_research_streaming(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def token_budget(request):
-    """GET /api/research/budget/ — return the current user's token usage."""
     budget = _get_budget(request.user)
     return Response({
-        'tokens_used': budget.tokens_used,
-        'token_limit': budget.token_limit,
+        'tokens_used':      budget.tokens_used,
+        'token_limit':      budget.token_limit,
         'tokens_remaining': budget.tokens_remaining,
-        'is_over_limit': budget.is_over_limit,
+        'is_over_limit':    budget.is_over_limit,
     })
 
 
@@ -203,10 +196,8 @@ def token_budget(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def history_list(request):
-    """GET /api/research/history/ — list all runs for the current user."""
-    runs = ResearchHistory.objects.filter(user=request.user)
-    serializer = ResearchHistorySerializer(runs, many=True)
-    return Response(serializer.data)
+    runs = ResearchHistory.objects.filter(user=request.user).order_by('-created_at')
+    return Response(ResearchHistorySerializer(runs, many=True).data)
 
 
 @api_view(['GET', 'PATCH', 'DELETE'])
