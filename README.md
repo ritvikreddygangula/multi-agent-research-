@@ -1,85 +1,92 @@
 # Multi-Agent Research Platform
 
-A full-stack web application that uses a team of AI agents to research any topic and produce a structured, sourced report. Instead of asking one model a question and getting one answer, this platform breaks the problem down, researches it in parallel, critiques the result, and synthesizes everything into something actually useful.
+A full-stack AI research platform that decomposes any topic into parallel sub-questions, researches each one independently using web search, Wikipedia, and arXiv, critiques the result, and synthesizes everything into a sourced, structured report — all streamed live to the UI.
 
-I built this to go beyond the typical "send a prompt, get a response" pattern and explore what a more realistic AI pipeline looks like when you care about reliability and traceability.
+Built to demonstrate a production-grade multi-agent architecture using LangGraph, not just a single LLM prompt.
 
 ---
 
 ## What it does
 
-You type in a topic — say, "the long-term effects of social media on teenage mental health" — and the platform:
+Type in a topic — e.g. *"the long-term effects of social media on teenage mental health"* — and the platform:
 
-1. **Plans** the research by decomposing the topic into specific sub-questions
-2. **Retrieves** context from past similar runs using vector memory (Pinecone)
+1. **Plans** the research by decomposing the topic into focused sub-questions
+2. **Retrieves** context from past similar runs using Pinecone vector memory
 3. **Researches** each sub-question in parallel using web search, Wikipedia, and arXiv
-4. **Aggregates** all the branch findings and deduplicates them
-5. **Critiques** the synthesis and sends it back for revision if the quality score is too low
-6. **Synthesizes** everything into a final report with confidence scores and source citations
-7. **Saves** the run to Pinecone so future searches on similar topics can benefit from it
+4. **Aggregates** all branch findings and deduplicates overlapping evidence
+5. **Critiques** the synthesis and routes it back for revision if the quality score is too low
+6. **Synthesizes** a final report with confidence scores and source citations
+7. **Saves** the run to Pinecone so future queries on similar topics benefit from it
 
-The whole pipeline runs as a live graph — you can watch each agent node light up in real time as it completes.
+Every node in the pipeline streams status updates to the frontend in real time — you can watch the agent graph light up as each step completes.
 
 ---
 
 ## Architecture
 
-The backend is orchestrated with **LangGraph**, which lets me define the agent pipeline as an explicit state machine with typed state, parallel branches, and conditional retry logic. This is very different from chaining prompts together — every node has a clear contract: it receives the shared state, does one job, and returns only what it changed.
+The backend runs as an explicit **LangGraph StateGraph** — a typed state machine where every node has a clear contract: receive shared state, do one job, return only what changed.
 
 ```
 START
   └─► Planner
-        └─► RAG Retrieval  (Pinecone semantic search over past runs)
-              └─► Fan-out  (one parallel branch per sub-question, up to 5)
+        └─► RAG Retrieval      (Pinecone semantic search over past runs)
+              └─► Fan-out      (parallel branch per sub-question, up to 5)
                     ├─► Branch 0 ─┐
                     ├─► Branch 1 ─┤
                     ├─► Branch 2 ─┼─► Aggregator
-                    ├─► Branch 3 ─┤       │
-                    └─► Branch 4 ─┘       ▼
-                                        Critic ──► (retry if score < 0.72)
-                                          │
-                                          └─► Synthesizer ──► END
-                                                  │
-                                            (upsert to Pinecone)
+                    ├─► Branch 3 ─┤        │
+                    └─► Branch 4 ─┘        ▼
+                                         Critic ──► (retry if score < 0.72, max 2×)
+                                           │
+                                           └─► Synthesizer ──► END
+                                                   │
+                                             (upsert to Pinecone)
 ```
 
 ### Agent roles
 
-| Agent | Job |
+| Agent | Responsibility |
 |---|---|
-| **Planner** | Breaks the topic into up to 5 focused sub-questions |
-| **RAG Retrieval** | Queries Pinecone for semantically similar past research runs |
-| **Branch Researchers** | Each branch researches one sub-question using web/Wikipedia/arXiv tools |
-| **Aggregator** | Merges all branch findings, deduplicates, computes confidence |
-| **Critic** | Scores the aggregated result and flags gaps or low-confidence claims |
-| **Synthesizer** | Writes the final structured report and stores it back to Pinecone |
+| **Planner** | Decomposes topic into up to 5 focused sub-questions |
+| **RAG Retrieval** | Pulls semantically similar prior research from Pinecone |
+| **Branch Researchers** | Each branch researches one sub-question independently |
+| **Aggregator** | Merges branch findings, deduplicates evidence, computes confidence |
+| **Critic** | Scores synthesis quality and flags gaps or weak claims |
+| **Synthesizer** | Writes the final structured report and stores it in Pinecone |
 
 ### Key design decisions
 
-- **Parallel fan-out via LangGraph's Send API** — branches run concurrently, not sequentially
-- **Partial failure tolerance** — if one branch errors, the rest continue; the aggregator works with what it has
-- **Retry loop** — if the critic scores the synthesis below 0.72, it routes back to the aggregator for another pass (max 2 retries)
-- **Vector memory** — every completed run is embedded and stored in Pinecone so the RAG node can pull in relevant prior context on future queries
-- **SSE streaming** — the Django backend streams `node_update` events over Server-Sent Events as each node completes, so the frontend graph updates in real time
+- **Parallel fan-out** via LangGraph's `Send` API — branches execute concurrently
+- **Partial failure tolerance** — a failing branch doesn't block the rest; the aggregator works with what it has
+- **Critic retry loop** — if the quality score is below 0.72, the graph routes back through the aggregator (capped at 2 iterations)
+- **Vector memory** — every completed run is embedded and stored so future queries on similar topics get prior context for free
+- **Real SSE streaming** — the backend streams `node_update` events as each node completes; the frontend graph updates live
 
 ---
 
 ## Tech stack
 
 **Backend**
-- Python / Django + Django REST Framework
-- LangGraph (StateGraph with typed state via TypedDict)
-- LangChain tools (web search, Wikipedia, arXiv)
-- Pinecone (vector memory, text-embedding-ada-002)
+- Python 3.11 / Django 4.2 + Django REST Framework
+- LangGraph — StateGraph with typed state (TypedDict + operator.add reducers)
+- LangChain — tool wrappers for Tavily web search, Wikipedia, arXiv
+- Pinecone — vector memory (text-embedding-ada-002, 1536 dims)
 - OpenAI GPT-4o
-- JWT authentication (djangorestframework-simplejwt)
-- Server-Sent Events for streaming
+- JWT authentication via `djangorestframework-simplejwt`
+- Server-Sent Events for real-time streaming
+- PostgreSQL (production) / SQLite (local dev)
+- Gunicorn + Whitenoise for production serving
 
 **Frontend**
 - React 18
-- React Flow (live agent graph visualization)
+- React Flow — live agent graph visualization
 - React Router 6
-- Fetch API with streaming SSE reader
+- Fetch API with SSE stream reader
+
+**Infrastructure**
+- Backend: [Render](https://render.com) (free tier web service)
+- Frontend: [Render](https://render.com) (free tier static site)
+- Database: [Neon](https://neon.tech) (free tier PostgreSQL)
 
 ---
 
@@ -88,57 +95,76 @@ START
 ```
 multi-agent-research-team/
 ├── backend/
-│   ├── core/                    # Django settings
-│   ├── auth_app/                # Signup / login endpoints
-│   └── research/
-│       ├── graph/
-│       │   ├── graph_builder.py # LangGraph StateGraph definition
-│       │   ├── nodes.py         # All agent node implementations
-│       │   ├── state.py         # Typed shared state (TypedDict)
-│       │   ├── tools.py         # Web/Wikipedia/arXiv tool wrappers
-│       │   └── pinecone_memory.py # Vector upsert and retrieval
-│       ├── services/
-│       │   └── research_service.py  # Entrypoint used by views
-│       └── views.py             # Thin API views + SSE streaming endpoint
+│   ├── core/
+│   │   ├── settings.py          # Django config, env vars, security settings
+│   │   └── urls.py              # Root URL routing
+│   ├── accounts/
+│   │   ├── models.py            # Custom User model + UserTokenBudget
+│   │   ├── views.py             # Signup / login endpoints
+│   │   └── serializers.py       # User schema
+│   ├── research/
+│   │   ├── graph/
+│   │   │   ├── graph_builder.py # LangGraph StateGraph definition
+│   │   │   ├── nodes.py         # All 6 node implementations
+│   │   │   ├── state.py         # Typed shared state (TypedDict)
+│   │   │   ├── tools.py         # Web / Wikipedia / arXiv tool wrappers
+│   │   │   └── pinecone_memory.py # Vector upsert and retrieval
+│   │   ├── services/
+│   │   │   └── research_service.py  # LangGraph orchestration entrypoint
+│   │   ├── models.py            # ResearchHistory — persists completed runs
+│   │   ├── serializers.py       # History response schema
+│   │   └── views.py             # API views + SSE streaming endpoint
+│   ├── Procfile                 # gunicorn start command
+│   ├── runtime.txt              # Python version pin for Render
+│   └── requirements.txt
 └── frontend/
     └── src/
         ├── components/
-        │   └── AgentGraphView.js  # React Flow live graph
+        │   ├── AgentGraphView.js  # React Flow live graph visualization
+        │   └── HistorySidebar.js  # Past research runs drawer
         ├── pages/
-        │   ├── Home.js            # Research input + live graph preview
-        │   └── Results.js         # Final report with findings + sources
-        └── services/
-            └── researchService.js # SSE stream reader
+        │   ├── Home.js            # Research input + live graph
+        │   ├── Results.js         # Final report — findings, sources, confidence
+        │   ├── History.js         # Research history list
+        │   ├── Login.js
+        │   └── Signup.js
+        ├── services/
+        │   ├── authService.js     # API client + safe storage fallback
+        │   └── researchService.js # SSE stream reader
+        └── context/
+            └── AuthContext.js     # Auth state + token management
 ```
 
 ---
 
-## Running it locally
+## Running locally
 
 ### Prerequisites
 
-- Python 3.10+
+- Python 3.11
 - Node.js 18+
 - OpenAI API key
 - Pinecone account (free tier works)
+- Tavily API key (free tier at [tavily.com](https://tavily.com))
 
 ### Backend
 
 ```bash
 cd backend
-python -m venv .venv
-source .venv/bin/activate
+python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Create a `.env` file in `backend/`:
+Create `backend/.env`:
 
-```
-SECRET_KEY=any-random-string
+```env
+SECRET_KEY=any-long-random-string
 DEBUG=True
 OPENAI_API_KEY=sk-...
 PINECONE_API_KEY=pcsk-...
 PINECONE_INDEX_NAME=research-memory
+TAVILY_API_KEY=tvly-...
+DEFAULT_TOKEN_LIMIT=100000
 ```
 
 ```bash
@@ -153,9 +179,9 @@ cd frontend
 npm install
 ```
 
-Create a `.env` file in `frontend/`:
+Create `frontend/.env`:
 
-```
+```env
 REACT_APP_API_URL=http://localhost:8000
 ```
 
@@ -167,38 +193,44 @@ Open `http://localhost:3000`, create an account, and start researching.
 
 ---
 
-## API endpoints
+## API reference
 
-| Method | Path | Description |
-|---|---|---|
-| POST | `/api/auth/signup/` | Register a new user |
-| POST | `/api/auth/login/` | Get JWT token pair |
-| POST | `/api/research/` | Run full pipeline, returns final JSON report |
-| POST | `/api/research/stream/` | Same pipeline over SSE — streams node updates in real time |
-
----
-
-## What the results look like
-
-Each research run returns:
-
-- **Executive summary** — high-level overview of the topic
-- **Key concepts** — important terms and ideas surfaced during research
-- **Important findings** — per-branch findings with individual confidence scores and source links
-- **Confidence score** — overall quality score from the critic (0–1)
-- **Sources** — all web, Wikipedia, and arXiv sources cited, color-coded by type
-
-On the results page you can also expand a frozen snapshot of the agent graph showing which nodes ran and completed.
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `POST` | `/api/auth/signup/` | — | Register a new user |
+| `POST` | `/api/auth/login/` | — | Authenticate, returns JWT pair |
+| `POST` | `/api/research/` | JWT | Run full pipeline, returns JSON report |
+| `POST` | `/api/research/stream/` | JWT | Same pipeline streamed over SSE |
+| `GET` | `/api/research/budget/` | JWT | Current token usage and limit |
+| `GET` | `/api/research/history/` | JWT | List all past research runs |
+| `GET` | `/api/research/history/<id>/` | JWT | Get a specific run |
+| `PATCH` | `/api/research/history/<id>/` | JWT | Rename a run |
+| `DELETE` | `/api/research/history/<id>/` | JWT | Delete a run |
 
 ---
 
 ## Environment variables
 
-| Variable | Where | Purpose |
+| Variable | Service | Purpose |
 |---|---|---|
-| `SECRET_KEY` | backend | Django secret key |
-| `DEBUG` | backend | Enable debug mode |
-| `OPENAI_API_KEY` | backend | GPT-4o access |
+| `SECRET_KEY` | backend | Django secret key (required, no default) |
+| `DEBUG` | backend | `True` for local dev, `False` in production |
+| `DATABASE_URL` | backend | PostgreSQL connection string (falls back to SQLite) |
+| `OPENAI_API_KEY` | backend | GPT-4o + embeddings |
 | `PINECONE_API_KEY` | backend | Pinecone vector store |
-| `PINECONE_INDEX_NAME` | backend | Name of your Pinecone index (1536 dims) |
-| `REACT_APP_API_URL` | frontend | Backend base URL |
+| `PINECONE_INDEX_NAME` | backend | Index name (1536-dim cosine, default: `research-memory`) |
+| `TAVILY_API_KEY` | backend | Web search |
+| `DEFAULT_TOKEN_LIMIT` | backend | Per-user token budget (default: 100,000) |
+| `ALLOWED_HOSTS` | backend | Comma-separated hostnames |
+| `CORS_ALLOWED_ORIGINS` | backend | Comma-separated frontend origins |
+| `REACT_APP_API_URL` | frontend | Backend base URL (baked in at build time) |
+
+---
+
+## Deployment (Render + Neon — free tier)
+
+| Service | Platform | Notes |
+|---|---|---|
+| Backend | Render Web Service | Root dir: `backend`, build: `pip install -r requirements.txt && python manage.py migrate && python manage.py collectstatic --noinput` |
+| Frontend | Render Static Site | Root dir: `frontend`, build: `npm install && npm run build`, publish: `build` |
+| Database | Neon | Free PostgreSQL — paste connection string as `DATABASE_URL` |
